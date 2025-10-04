@@ -1,4 +1,7 @@
 # Игра Шашки на Python
+
+[![DOI](https://zenodo.org/badge/599624798.svg)](https://doi.org/10.5281/zenodo.17264476)
+
 ## Скриншот
 
 <p align="center">
