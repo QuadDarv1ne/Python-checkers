@@ -46,3 +46,5 @@
 ※ Предложения по сотрудничеству можете присылать на почту ※
 📧 maksimqwe42@mail.ru
 ```
+
+[![Star History Chart](https://api.star-history.com/svg?repos=QuadDarv1ne/Python-checkers&type=Date)](https://star-history.com/#QuadDarv1ne/Python-checkers&Date)
