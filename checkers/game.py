@@ -323,48 +323,87 @@ class Game:
                 self.__handle_enemy_turn()
 
     def __predict_optimal_moves(self, side: SideType) -> list[Move]:
-        '''Предсказать оптимальный ход'''
-        best_result = -inf
-        optimal_moves = []
-        predicted_moves_list = self.__get_predicted_moves_list(side)
+        '''Предсказать оптимальный ход с помощью минимакса с альфа-бета отсечением'''
+        max_depth = self.__difficulty.depth
+        field_copy = Field.copy(self.__field)
 
-        if (predicted_moves_list):
-            field_copy = Field.copy(self.__field)
-            for moves in predicted_moves_list:
-                for move in moves:
-                    self.__handle_move(move, draw=False)
+        # Получаем все возможные ходы
+        moves_list = self.__get_moves_list(side)
+        if not (moves_list):
+            return []
 
-                result = self.__evaluate_field(side)
+        best_score = -inf
+        best_moves = []
 
-                if (result > best_result):
-                    best_result = result
-                    optimal_moves.clear()
-                    optimal_moves.append(moves)
-                elif (result == best_result):
-                    optimal_moves.append(moves)
+        for move in moves_list:
+            # Совершаем ход
+            self.__handle_move(move, draw=False)
 
-                self.__field = Field.copy(field_copy)
+            # Запускаем минимакс с альфа-бета отсечением
+            score = self.__minimax(side, max_depth - 1, -inf, inf, False)
 
+            # Восстанавливаем поле
+            self.__field = Field.copy(field_copy)
+
+            if (score > best_score):
+                best_score = score
+                best_moves = [[move]]
+            elif (score == best_score):
+                best_moves.append([move])
+
+        # Обработка результатов с учётом случайности для низких уровней
         optimal_move = []
-        if (optimal_moves):
-            # Фильтрация хода и добавление случайности для низких уровней сложности
-            for move in choice(optimal_moves):
-                if   (side == SideType.WHITE and self.__field.type_at(move.from_x, move.from_y) in BLACK_CHECKERS): break
-                elif (side == SideType.BLACK and self.__field.type_at(move.from_x, move.from_y) in WHITE_CHECKERS): break
-
-                # Добавление случайности для лёгких уровней (пропуск хода с вероятностью)
+        if (best_moves):
+            selected_moves = choice(best_moves)
+            for move in selected_moves:
+                # Добавление случайности для лёгких уровней
                 if (self.__difficulty == DifficultyType.EASY and random() < 0.3):
                     continue
                 elif (self.__difficulty == DifficultyType.MEDIUM and random() < 0.1):
                     continue
-
                 optimal_move.append(move)
 
-            # Если все ходы отфильтрованы, вернуть первый ход
-            if not (optimal_move) and optimal_moves:
-                optimal_move = [choice(optimal_moves)[0]]
+            if not (optimal_move) and best_moves:
+                optimal_move = [choice(best_moves)[0]]
 
         return optimal_move
+
+    def __minimax(self, side: SideType, depth: int, alpha: float, beta: float, is_maximizing: bool) -> float:
+        '''Минимакс с альфа-бета отсечением'''
+        if (depth == 0):
+            return self.__evaluate_field(side)
+
+        current_side = side if is_maximizing else SideType.opposite(side)
+        moves_list = self.__get_moves_list(current_side)
+
+        if not (moves_list):
+            # Нет ходов - конец игры
+            return -inf if is_maximizing else inf
+
+        field_copy = Field.copy(self.__field)
+
+        if (is_maximizing):
+            max_eval = -inf
+            for move in moves_list:
+                self.__handle_move(move, draw=False)
+                eval_score = self.__minimax(side, depth - 1, alpha, beta, False)
+                self.__field = Field.copy(field_copy)
+                max_eval = max(max_eval, eval_score)
+                alpha = max(alpha, eval_score)
+                if (beta <= alpha):
+                    break
+            return max_eval
+        else:
+            min_eval = inf
+            for move in moves_list:
+                self.__handle_move(move, draw=False)
+                eval_score = self.__minimax(side, depth - 1, alpha, beta, True)
+                self.__field = Field.copy(field_copy)
+                min_eval = min(min_eval, eval_score)
+                beta = min(beta, eval_score)
+                if (beta <= alpha):
+                    break
+            return min_eval
 
     def __evaluate_field(self, side: SideType) -> float:
         '''Оценка позиции на поле'''
@@ -418,39 +457,6 @@ class Game:
                     positional_bonus -= center_bonus + defense_bonus + advance_bonus
 
         return (my_score / enemy_score) + positional_bonus
-
-    def __get_predicted_moves_list(self, side: SideType, current_prediction_depth: int = 0, all_moves_list: list[Move] = [], current_moves_list: list[Move] = [], required_moves_list: list[Move] = []) -> list[Move]:
-        '''Предсказать все возможные ходы'''
-
-        if (current_moves_list):
-            all_moves_list.append(current_moves_list)
-        else:
-            all_moves_list.clear()
-
-        if (required_moves_list):
-            moves_list = required_moves_list
-        else:
-            moves_list = self.__get_moves_list(side)
-
-        # Использование глубины из уровня сложности
-        max_depth = self.__difficulty.depth
-
-        if (moves_list and current_prediction_depth < max_depth):
-            field_copy = Field.copy(self.__field)
-            for move in moves_list:
-                has_killed_checker = self.__handle_move(move, draw=False)
-
-                required_moves_list = list(filter(lambda required_move: move.to_x == required_move.from_x and move.to_y == required_move.from_y, self.__get_required_moves_list(side)))
-
-                # Если есть ещё ход этой же шашкой
-                if (has_killed_checker and required_moves_list):
-                    self.__get_predicted_moves_list(side, current_prediction_depth, all_moves_list, current_moves_list + [move], required_moves_list)
-                else:
-                    self.__get_predicted_moves_list(SideType.opposite(side), current_prediction_depth + 1, all_moves_list, current_moves_list + [move])
-
-                self.__field = Field.copy(field_copy)
-
-        return all_moves_list
 
     def __get_moves_list(self, side: SideType) -> list[Move]:
         '''Получение списка ходов'''
