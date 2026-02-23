@@ -69,6 +69,7 @@ class Game:
         self.__selected_cell = Point()
         self.__animated_cell = Point()
         self.__last_move = None
+        self.__hint_move = None
 
         self.__sound_manager = SoundManager()
 
@@ -151,6 +152,23 @@ class Game:
                             fill='#54b346', stipple='gray50', tag='hovered_move_highlight'
                         )
 
+                # Подсветка подсказки
+                if (self.__hint_move):
+                    # Подсветка исходной позиции жёлтым
+                    if (x == self.__hint_move.from_x and y == self.__hint_move.from_y):
+                        self.__canvas.create_rectangle(
+                            x * CELL_SIZE, y * CELL_SIZE,
+                            x * CELL_SIZE + CELL_SIZE, y * CELL_SIZE + CELL_SIZE,
+                            fill='#FFD700', stipple='gray50', tag='hint_highlight'
+                        )
+                    # Подсветка позиции назначения зелёным
+                    if (x == self.__hint_move.to_x and y == self.__hint_move.to_y):
+                        self.__canvas.create_rectangle(
+                            x * CELL_SIZE, y * CELL_SIZE,
+                            x * CELL_SIZE + CELL_SIZE, y * CELL_SIZE + CELL_SIZE,
+                            fill='#54b346', stipple='gray50', tag='hint_highlight'
+                        )
+
     def __draw_checkers(self):
         '''Отрисовка шашек'''
         for y in range(self.__field.y_size):
@@ -192,6 +210,10 @@ class Game:
 
         # Если точка не внутри поля
         if not (self.__field.is_within(x, y)): return
+
+        # Скрыть подсказку при любом действии
+        if (self.__hint_move):
+            self.hide_hint()
 
         if (PLAYER_SIDE == SideType.WHITE):
             player_checkers = WHITE_CHECKERS
@@ -579,3 +601,45 @@ class Game:
     @property
     def sounds_enabled(self) -> bool:
         return self.__sound_manager.enabled
+
+    def get_hint(self) -> Move:
+        '''Получить подсказку - лучший ход для игрока'''
+        if (PLAYER_SIDE == SideType.WHITE):
+            side = SideType.WHITE
+        else:
+            side = SideType.BLACK
+
+        moves_list = self.__get_moves_list(side)
+        if not (moves_list):
+            return None
+
+        best_score = -inf
+        best_move = None
+        field_copy = Field.copy(self.__field)
+
+        for move in moves_list:
+            self.__handle_move(move, draw=False)
+            score = self.__minimax(side, 2, -inf, inf, True)
+            self.__field = Field.copy(field_copy)
+
+            if (score > best_score):
+                best_score = score
+                best_move = move
+
+        return best_move
+
+    def show_hint(self):
+        '''Показать подсказку'''
+        if (self.__player_turn):
+            self.__hint_move = self.get_hint()
+            self.__draw()
+
+    def hide_hint(self):
+        '''Скрыть подсказку'''
+        self.__hint_move = None
+        self.__draw()
+
+    @property
+    def hint_move(self):
+        '''Ход-подсказка'''
+        return self.__hint_move

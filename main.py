@@ -85,6 +85,10 @@ def main():
         sounds_text = "Вкл" if game.sounds_enabled else "Выкл"
         sound_label.config(text=f'🔊 Звук: {sounds_text}')
 
+    def show_hint():
+        nonlocal game
+        game.show_hint()
+
     def restart_game():
         nonlocal game
         result = messagebox.askyesno("Новая игра", "Начать новую игру?")
@@ -93,6 +97,7 @@ def main():
             game = Game(main_canvas, X_SIZE, Y_SIZE, difficulty, update_callback=lambda: update_status(game))
             update_status(game)
 
+    game_menu.add_command(label="💡 Подсказка", command=show_hint)
     game_menu.add_command(label="🔊 Звук", command=toggle_sounds)
     game_menu.add_command(label="Новая игра", command=restart_game)
     game_menu.add_separator()
