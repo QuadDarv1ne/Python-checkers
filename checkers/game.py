@@ -60,6 +60,7 @@ class Game:
         self.__hovered_cell = Point()
         self.__selected_cell = Point()
         self.__animated_cell = Point()
+        self.__last_move = None
 
         self.__sound_manager = SoundManager()
 
@@ -120,6 +121,10 @@ class Game:
                 elif (x == self.__hovered_cell.x and y == self.__hovered_cell.y):
                     self.__canvas.create_rectangle(x * CELL_SIZE + BORDER_WIDTH // 2, y * CELL_SIZE + BORDER_WIDTH // 2, x * CELL_SIZE + CELL_SIZE - BORDER_WIDTH // 2, y * CELL_SIZE + CELL_SIZE - BORDER_WIDTH // 2, outline=HOVER_BORDER_COLOR,  width=BORDER_WIDTH, tag='border')
 
+                # Отрисовка выделения последнего хода
+                if (self.__last_move and (x == self.__last_move.from_x and y == self.__last_move.from_y or x == self.__last_move.to_x and y == self.__last_move.to_y)):
+                    self.__canvas.create_rectangle(x * CELL_SIZE + BORDER_WIDTH // 2, y * CELL_SIZE + BORDER_WIDTH // 2, x * CELL_SIZE + CELL_SIZE - BORDER_WIDTH // 2, y * CELL_SIZE + CELL_SIZE - BORDER_WIDTH // 2, outline='#4a90d9', width=BORDER_WIDTH, tag='last_move_border')
+
                 # Отрисовка возможных точек перемещения, если есть выбранная ячейка
                 if (self.__selected_cell):
                     player_moves_list = self.__get_moves_list(PLAYER_SIDE)
@@ -163,6 +168,7 @@ class Game:
         # Если нажатие по шашке игрока, то выбрать её
         if (self.__field.type_at(x, y) in player_checkers):
             self.__selected_cell = Point(x, y)
+            self.__last_move = None  # Сброс выделения последнего хода
             self.__draw()
         elif (self.__player_turn):
             move = Move(self.__selected_cell.x, self.__selected_cell.y, x, y)
@@ -218,6 +224,9 @@ class Game:
                 self.__sound_manager.play('capture')
             else:
                 self.__sound_manager.play('move')
+            
+            # Сохранение последнего хода
+            self.__last_move = move
             self.__draw()
 
         return has_killed_checker
