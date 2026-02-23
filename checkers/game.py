@@ -1,21 +1,59 @@
 from tkinter import Canvas, Event, messagebox
 from PIL import Image, ImageTk
-from random import choice
+from random import choice, random
 from pathlib import Path
 from time import sleep
 from math import inf
+import threading
 
 from checkers.field import Field
 from checkers.move import Move
 from checkers.constants import *
-from checkers.enums import CheckerType, SideType
+from checkers.enums import CheckerType, SideType, DifficultyType
 
 from PIL.Image import LANCZOS as ANTIALIAS
 
+class SoundManager:
+    """Менеджер звуковых эффектов"""
+    
+    def __init__(self):
+        self.__enabled = True
+        try:
+            from playsound import playsound
+            self.__playsound = playsound
+            self.__sounds = {
+                'move': str(Path('assets', 'move.wav')),
+                'capture': str(Path('assets', 'capture.wav')),
+                'queen': str(Path('assets', 'queen.wav'))
+            }
+        except ImportError:
+            self.__enabled = False
+    
+    def play(self, sound_name: str):
+        """Воспроизвести звук в отдельном потоке"""
+        if not self.__enabled:
+            return
+        
+        sound_path = self.__sounds.get(sound_name)
+        if not sound_path:
+            return
+        
+        try:
+            thread = threading.Thread(target=self.__playsound, args=(sound_path,), daemon=True)
+            thread.start()
+        except Exception:
+            pass
+    
+    @property
+    def enabled(self):
+        return self.__enabled
+
 class Game:
-    def __init__(self, canvas: Canvas, x_field_size: int, y_field_size: int):
+    def __init__(self, canvas: Canvas, x_field_size: int, y_field_size: int, difficulty: DifficultyType = DEFAULT_DIFFICULTY, update_callback=None):
         self.__canvas = canvas
         self.__field = Field(x_field_size, y_field_size)
+        self.__difficulty = difficulty
+        self.__update_callback = update_callback
 
         self.__player_turn = True
 
@@ -23,8 +61,10 @@ class Game:
         self.__selected_cell = Point()
         self.__animated_cell = Point()
 
+        self.__sound_manager = SoundManager()
+
         self.__init_images()
-        
+
         self.__draw()
 
         # Если игрок играет за чёрных, то совершить ход противника
@@ -66,6 +106,7 @@ class Game:
         self.__canvas.delete('all')
         self.__draw_field_grid()
         self.__draw_checkers()
+        self.__notify_update()
 
     def __draw_field_grid(self):
         '''Отрисовка сетки поля'''
@@ -138,6 +179,13 @@ class Game:
         '''Совершение хода'''
         if (draw): self.__animate_move(move)
 
+        # Определение типа движения для звука
+        is_queen_promotion = False
+        if (move.to_y == 0 and self.__field.type_at(move.from_x, move.from_y) == CheckerType.WHITE_REGULAR):
+            is_queen_promotion = True
+        elif (move.to_y == self.__field.y_size - 1 and self.__field.type_at(move.from_x, move.from_y) == CheckerType.BLACK_REGULAR):
+            is_queen_promotion = True
+
         # Изменение типа шашки, если она дошла до края
         if (move.to_y == 0 and self.__field.type_at(move.from_x, move.from_y) == CheckerType.WHITE_REGULAR):
             self.__field.at(move.from_x, move.from_y).change_type(CheckerType.WHITE_QUEEN)
@@ -162,7 +210,15 @@ class Game:
                 self.__field.at(x, y).change_type(CheckerType.NONE)
                 has_killed_checker = True
 
-        if (draw): self.__draw()
+        # Воспроизведение звука
+        if (draw):
+            if (is_queen_promotion):
+                self.__sound_manager.play('queen')
+            elif (has_killed_checker):
+                self.__sound_manager.play('capture')
+            else:
+                self.__sound_manager.play('move')
+            self.__draw()
 
         return has_killed_checker
 
@@ -201,22 +257,31 @@ class Game:
         white_moves_list = self.__get_moves_list(SideType.WHITE)
         if not (white_moves_list):
             # Белые проиграли
-            answer = messagebox.showinfo('Конец игры', 'Чёрные выиграли')
+            messagebox.showinfo('Конец игры', 'Чёрные выиграли')
             game_over = True
 
         black_moves_list = self.__get_moves_list(SideType.BLACK)
         if not (black_moves_list):
             # Чёрные проиграли
-            answer = messagebox.showinfo('Конец игры', 'Белые выиграли')
+            messagebox.showinfo('Конец игры', 'Белые выиграли')
             game_over = True
-        
+
         if (game_over):
-            # Новая игра
-            self.__init__(self.__canvas, self.__field.x_size, self.__field.y_size)
+            # Новая игра с сохранением уровня сложности
+            self.__field = Field(self.__field.x_size, self.__field.y_size)
+            self.__player_turn = True
+            self.__hovered_cell = Point()
+            self.__selected_cell = Point()
+            self.__animated_cell = Point()
+            self.__draw()
+
+            # Если игрок играет за чёрных, то совершить ход противника
+            if (PLAYER_SIDE == SideType.BLACK):
+                self.__handle_enemy_turn()
 
     def __predict_optimal_moves(self, side: SideType) -> list[Move]:
         '''Предсказать оптимальный ход'''
-        best_result = 0
+        best_result = -inf
         optimal_moves = []
         predicted_moves_list = self.__get_predicted_moves_list(side)
 
@@ -226,14 +291,8 @@ class Game:
                 for move in moves:
                     self.__handle_move(move, draw=False)
 
-                try:
-                    if (side == SideType.WHITE):
-                        result = self.__field.white_score / self.__field.black_score
-                    elif (side == SideType.BLACK):
-                        result = self.__field.black_score / self.__field.white_score
-                except ZeroDivisionError:
-                        result = inf
-                
+                result = self.__evaluate_field(side)
+
                 if (result > best_result):
                     best_result = result
                     optimal_moves.clear()
@@ -245,14 +304,77 @@ class Game:
 
         optimal_move = []
         if (optimal_moves):
-            # Фильтрация хода
+            # Фильтрация хода и добавление случайности для низких уровней сложности
             for move in choice(optimal_moves):
                 if   (side == SideType.WHITE and self.__field.type_at(move.from_x, move.from_y) in BLACK_CHECKERS): break
                 elif (side == SideType.BLACK and self.__field.type_at(move.from_x, move.from_y) in WHITE_CHECKERS): break
 
+                # Добавление случайности для лёгких уровней (пропуск хода с вероятностью)
+                if (self.__difficulty == DifficultyType.EASY and random() < 0.3):
+                    continue
+                elif (self.__difficulty == DifficultyType.MEDIUM and random() < 0.1):
+                    continue
+
                 optimal_move.append(move)
 
+            # Если все ходы отфильтрованы, вернуть первый ход
+            if not (optimal_move) and optimal_moves:
+                optimal_move = [choice(optimal_moves)[0]]
+
         return optimal_move
+
+    def __evaluate_field(self, side: SideType) -> float:
+        '''Оценка позиции на поле'''
+        if (side == SideType.WHITE):
+            enemy_side = SideType.BLACK
+        else:
+            enemy_side = SideType.WHITE
+
+        # Базовая оценка по материалу
+        my_score = self.__field.get_score(side)
+        enemy_score = self.__field.get_score(enemy_side)
+
+        if (enemy_score == 0):
+            return inf
+        if (my_score == 0):
+            return -inf
+
+        # Позиционная оценка
+        positional_bonus = 0
+        center_x, center_y = self.__field.x_size / 2, self.__field.y_size / 2
+
+        for y in range(self.__field.y_size):
+            for x in range(self.__field.x_size):
+                checker_type = self.__field.type_at(x, y)
+                if (checker_type == CheckerType.NONE):
+                    continue
+
+                # Расстояние до центра
+                distance_to_center = abs(x - center_x) + abs(y - center_y)
+                center_bonus = (4 - distance_to_center) * 0.1
+
+                # Защита шашек (бонус за соседние союзные шашки)
+                defense_bonus = 0
+                for offset in MOVE_OFFSETS:
+                    if (self.__field.is_within(x + offset.x, y + offset.y)):
+                        if (self.__field.type_at(x + offset.x, y + offset.y) in 
+                            (WHITE_CHECKERS if side == SideType.WHITE else BLACK_CHECKERS)):
+                            defense_bonus += 0.2
+
+                # Бонус за продвижение вперёд
+                advance_bonus = 0
+                if (side == SideType.WHITE):
+                    advance_bonus = (self.__field.y_size - 1 - y) * 0.05
+                else:
+                    advance_bonus = y * 0.05
+
+                # Суммируем бонусы
+                if (checker_type in (WHITE_CHECKERS if side == SideType.WHITE else BLACK_CHECKERS)):
+                    positional_bonus += center_bonus + defense_bonus + advance_bonus
+                else:
+                    positional_bonus -= center_bonus + defense_bonus + advance_bonus
+
+        return (my_score / enemy_score) + positional_bonus
 
     def __get_predicted_moves_list(self, side: SideType, current_prediction_depth: int = 0, all_moves_list: list[Move] = [], current_moves_list: list[Move] = [], required_moves_list: list[Move] = []) -> list[Move]:
         '''Предсказать все возможные ходы'''
@@ -267,7 +389,10 @@ class Game:
         else:
             moves_list = self.__get_moves_list(side)
 
-        if (moves_list and current_prediction_depth < MAX_PREDICTION_DEPTH):
+        # Использование глубины из уровня сложности
+        max_depth = self.__difficulty.depth
+
+        if (moves_list and current_prediction_depth < max_depth):
             field_copy = Field.copy(self.__field)
             for move in moves_list:
                 has_killed_checker = self.__handle_move(move, draw=False)
@@ -377,3 +502,23 @@ class Game:
                             else:
                                 break
         return moves_list
+
+    @property
+    def is_player_turn(self) -> bool:
+        '''Ход игрока'''
+        return self.__player_turn
+
+    @property
+    def white_checkers_count(self) -> int:
+        '''Количество белых шашек'''
+        return self.__field.white_checkers_count
+
+    @property
+    def black_checkers_count(self) -> int:
+        '''Количество чёрных шашек'''
+        return self.__field.black_checkers_count
+
+    def __notify_update(self):
+        '''Уведомить об обновлении'''
+        if self.__update_callback:
+            self.__update_callback()

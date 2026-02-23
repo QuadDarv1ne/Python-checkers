@@ -77,3 +77,12 @@ class Field:
     def black_score(self) -> int:
         '''Счёт чёрных'''
         return sum(reduce(lambda acc, checker: acc + (checker.type == CheckerType.BLACK_REGULAR) + (checker.type == CheckerType.BLACK_QUEEN) * 3, checkers, 0) for checkers in self.__checkers)
+
+    def get_score(self, side: SideType) -> int:
+        '''Получить счёт для указанной стороны'''
+        if (side == SideType.WHITE):
+            return self.white_score
+        elif (side == SideType.BLACK):
+            return self.black_score
+        else:
+            return 0

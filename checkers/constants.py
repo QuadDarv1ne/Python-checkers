@@ -1,8 +1,11 @@
 from checkers.point import Point
-from checkers.enums import CheckerType, SideType
+from checkers.enums import CheckerType, SideType, DifficultyType
 
 # Сторона за которую играет игрок
 PLAYER_SIDE = SideType.WHITE
+
+# Уровень сложности по умолчанию
+DEFAULT_DIFFICULTY = DifficultyType.MEDIUM
 
 # Размер поля
 X_SIZE = Y_SIZE = 8
@@ -11,9 +14,6 @@ CELL_SIZE = 75
 
 # Скорость анимации (больше = быстрее)
 ANIMATION_SPEED = 4
-
-# Количество ходов для предсказания
-MAX_PREDICTION_DEPTH = 3
 
 # Ширина рамки (Желательно должна быть чётной)
 BORDER_WIDTH = 2 * 2
