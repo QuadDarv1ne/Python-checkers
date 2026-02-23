@@ -114,6 +114,12 @@ def main():
     main_canvas.bind("<Motion>", game.mouse_move)
     main_canvas.bind("<Button-1>", game.mouse_down)
 
+    # Горячие клавиши
+    main_window.bind("<Control-h>", lambda e: game.show_hint())  # Подсказка
+    main_window.bind("<Control-n>", lambda e: restart_game())    # Новая игра
+    main_window.bind("<Control-s>", lambda e: toggle_sounds())   # Звук
+    main_window.bind("<Escape>", lambda e: game.hide_hint())     # Скрыть подсказку
+
     update_status(game)
 
     main_window.mainloop()
