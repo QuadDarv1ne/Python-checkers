@@ -132,6 +132,17 @@ class Game:
                         if (self.__selected_cell.x == move.from_x and self.__selected_cell.y == move.from_y):
                             self.__canvas.create_oval(move.to_x * CELL_SIZE + CELL_SIZE / 3, move.to_y * CELL_SIZE + CELL_SIZE / 3, move.to_x * CELL_SIZE + (CELL_SIZE - CELL_SIZE / 3), move.to_y * CELL_SIZE + (CELL_SIZE - CELL_SIZE / 3), fill=POSIBLE_MOVE_CIRCLE_COLOR, width=0, tag='posible_move_circle' )
 
+                # Подсветка ходов при наведении на шашку игрока
+                if (self.__player_turn and not self.__selected_cell):
+                    hovered_moves = self.__get_hovered_cell_moves()
+                    for move in hovered_moves:
+                        # Подсветка клетки назначения полупрозрачным зелёным
+                        self.__canvas.create_rectangle(
+                            move.to_x * CELL_SIZE, move.to_y * CELL_SIZE,
+                            move.to_x * CELL_SIZE + CELL_SIZE, move.to_y * CELL_SIZE + CELL_SIZE,
+                            fill='#54b346', stipple='gray50', tag='hovered_move_highlight'
+                        )
+
     def __draw_checkers(self):
         '''Отрисовка шашек'''
         for y in range(self.__field.y_size):
@@ -149,6 +160,21 @@ class Game:
             # Если ход игрока, то перерисовать
             if (self.__player_turn):
                 self.__draw()
+
+    def __get_hovered_cell_moves(self) -> list[Move]:
+        '''Получить ходы для шашки под курсором'''
+        if (PLAYER_SIDE == SideType.WHITE):
+            player_checkers = WHITE_CHECKERS
+        elif (PLAYER_SIDE == SideType.BLACK):
+            player_checkers = BLACK_CHECKERS
+        else:
+            return []
+
+        # Если под курсором шашка игрока
+        if (self.__field.type_at(self.__hovered_cell.x, self.__hovered_cell.y) in player_checkers):
+            all_moves = self.__get_moves_list(PLAYER_SIDE)
+            return [m for m in all_moves if m.from_x == self.__hovered_cell.x and m.from_y == self.__hovered_cell.y]
+        return []
 
     def mouse_down(self, event: Event):
         '''Событие нажатия мышки'''
