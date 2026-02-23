@@ -15,7 +15,7 @@ from PIL.Image import LANCZOS as ANTIALIAS
 
 class SoundManager:
     """Менеджер звуковых эффектов"""
-    
+
     def __init__(self):
         self.__enabled = True
         try:
@@ -28,25 +28,33 @@ class SoundManager:
             }
         except ImportError:
             self.__enabled = False
-    
+
     def play(self, sound_name: str):
         """Воспроизвести звук в отдельном потоке"""
         if not self.__enabled:
             return
-        
+
         sound_path = self.__sounds.get(sound_name)
         if not sound_path:
             return
-        
+
         try:
             thread = threading.Thread(target=self.__playsound, args=(sound_path,), daemon=True)
             thread.start()
         except Exception:
             pass
-    
+
+    def toggle(self):
+        """Переключить состояние звуков"""
+        self.__enabled = not self.__enabled
+
     @property
     def enabled(self):
         return self.__enabled
+
+    @property
+    def enabled_str(self):
+        return "Вкл" if self.__enabled else "Выкл"
 
 class Game:
     def __init__(self, canvas: Canvas, x_field_size: int, y_field_size: int, difficulty: DifficultyType = DEFAULT_DIFFICULTY, update_callback=None):
@@ -557,3 +565,11 @@ class Game:
         '''Уведомить об обновлении'''
         if self.__update_callback:
             self.__update_callback()
+
+    def toggle_sounds(self):
+        '''Переключить звуки'''
+        self.__sound_manager.toggle()
+
+    @property
+    def sounds_enabled(self) -> bool:
+        return self.__sound_manager.enabled
