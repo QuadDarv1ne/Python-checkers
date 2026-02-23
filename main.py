@@ -2,8 +2,12 @@ from tkinter import Tk, Canvas, PhotoImage, Menu, messagebox, IntVar, Frame, Lab
 from checkers.game import Game
 from checkers.constants import X_SIZE, Y_SIZE, CELL_SIZE, DEFAULT_DIFFICULTY
 from checkers.enums import DifficultyType
+from checkers.settings import Settings
 
 def main():
+    # Загрузка настроек
+    settings = Settings()
+
     # Создание окна
     main_window = Tk()
     main_window.title('Шашки')
@@ -18,7 +22,8 @@ def main():
     status_label = Label(status_frame, text='Ход: Белые', font=('Arial', 12, 'bold'), bg='#f0f0f0')
     status_label.pack(side='left', padx=10, pady=5)
 
-    difficulty_label = Label(status_frame, text=f'Сложность: {DEFAULT_DIFFICULTY.name_ru}', font=('Arial', 10), bg='#f0f0f0')
+    saved_difficulty = list(DifficultyType)[settings.difficulty]
+    difficulty_label = Label(status_frame, text=f'Сложность: {saved_difficulty.name_ru}', font=('Arial', 10), bg='#f0f0f0')
     difficulty_label.pack(side='left', padx=10, pady=5)
 
     white_checkers_label = Label(status_frame, text='⚪ Белые: 12', font=('Arial', 10), bg='#f0f0f0')
@@ -27,7 +32,8 @@ def main():
     black_checkers_label = Label(status_frame, text='⚫ Чёрные: 12', font=('Arial', 10), bg='#f0f0f0')
     black_checkers_label.pack(side='left', padx=10, pady=5)
 
-    sound_label = Label(status_frame, text='🔊 Звук: Вкл', font=('Arial', 10), bg='#f0f0f0')
+    sounds_text = "Вкл" if settings.sounds_enabled else "Выкл"
+    sound_label = Label(status_frame, text=f'🔊 Звук: {sounds_text}', font=('Arial', 10), bg='#f0f0f0')
     sound_label.pack(side='left', padx=20, pady=5)
 
     # Создание меню
@@ -43,7 +49,7 @@ def main():
     game_menu.add_cascade(label="Сложность", menu=difficulty_menu)
 
     # Переменная для хранения текущего уровня сложности
-    difficulty_var = IntVar(value=list(DifficultyType).index(DEFAULT_DIFFICULTY))
+    difficulty_var = IntVar(value=settings.difficulty)
 
     def update_status(game_instance):
         '''Обновление статуса игры'''
@@ -51,7 +57,7 @@ def main():
         black_count = game_instance.black_checkers_count
         white_checkers_label.config(text=f'⚪ Белые: {white_count}')
         black_checkers_label.config(text=f'⚫ Чёрные: {black_count}')
-        
+
         if game_instance.is_player_turn:
             player_name = "Белые" if PLAYER_SIDE == SideType.WHITE else "Чёрные"
         else:
@@ -60,10 +66,12 @@ def main():
 
     def set_difficulty(difficulty: DifficultyType):
         nonlocal game
-        result = messagebox.askyesno("Новая игра", 
+        result = messagebox.askyesno("Новая игра",
             f"Изменить уровень сложности на {difficulty.name_ru}?\nТекущая игра будет перезапущена.")
         if result:
-            difficulty_var.set(list(DifficultyType).index(difficulty))
+            difficulty_index = list(DifficultyType).index(difficulty)
+            difficulty_var.set(difficulty_index)
+            settings.difficulty = difficulty_index
             game = Game(main_canvas, X_SIZE, Y_SIZE, difficulty, update_callback=lambda: update_status(game))
             difficulty_label.config(text=f'Сложность: {difficulty.name_ru}')
             update_status(game)
@@ -82,6 +90,7 @@ def main():
     def toggle_sounds():
         nonlocal game
         game.toggle_sounds()
+        settings.sounds_enabled = game.sounds_enabled
         sounds_text = "Вкл" if game.sounds_enabled else "Выкл"
         sound_label.config(text=f'🔊 Звук: {sounds_text}')
 
@@ -109,7 +118,8 @@ def main():
 
     from checkers.enums import SideType
     from checkers.constants import PLAYER_SIDE
-    game = Game(main_canvas, X_SIZE, Y_SIZE, DEFAULT_DIFFICULTY, update_callback=lambda: update_status(game))
+    saved_difficulty = list(DifficultyType)[settings.difficulty]
+    game = Game(main_canvas, X_SIZE, Y_SIZE, saved_difficulty, update_callback=lambda: update_status(game))
 
     main_canvas.bind("<Motion>", game.mouse_move)
     main_canvas.bind("<Button-1>", game.mouse_down)
