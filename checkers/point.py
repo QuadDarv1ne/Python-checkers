@@ -11,6 +11,9 @@ class Point:
     def y(self):
         return self.__y
 
+    def __bool__(self):
+        return self.__x >= 0 and self.__y >= 0
+
     def __eq__(self, other):
         if isinstance(other, Point):
             return (

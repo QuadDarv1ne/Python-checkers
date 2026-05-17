@@ -40,7 +40,7 @@ class Settings:
     
     @difficulty.setter
     def difficulty(self, value: int):
-        self.set('difficulty', value)
+        self.set('difficulty', max(0, min(3, value)))
         self.save()
     
     @property

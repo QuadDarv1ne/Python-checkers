@@ -1,4 +1,4 @@
-from checkers.enums import CheckerType
+from checkers.enums import CheckerType, SideType
 from checkers.checker import Checker
 from checkers.constants import WHITE_CHECKERS, BLACK_CHECKERS
 from checkers.point import Point

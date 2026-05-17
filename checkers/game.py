@@ -241,18 +241,20 @@ class Game:
         '''Совершение хода'''
         if (draw): self.__animate_move(move)
 
-        # Определение типа движения для звука
+        # Определение типа движения для звука и промоушна
         is_queen_promotion = False
-        if (move.to_y == 0 and self.__field.type_at(move.from_x, move.from_y) == CheckerType.WHITE_REGULAR):
-            is_queen_promotion = True
-        elif (move.to_y == self.__field.y_size - 1 and self.__field.type_at(move.from_x, move.from_y) == CheckerType.BLACK_REGULAR):
-            is_queen_promotion = True
+        moving_type = self.__field.type_at(move.from_x, move.from_y)
 
-        # Изменение типа шашки, если она дошла до края
-        if (move.to_y == 0 and self.__field.type_at(move.from_x, move.from_y) == CheckerType.WHITE_REGULAR):
-            self.__field.at(move.from_x, move.from_y).change_type(CheckerType.WHITE_QUEEN)
-        elif (move.to_y == self.__field.y_size - 1 and self.__field.type_at(move.from_x, move.from_y) == CheckerType.BLACK_REGULAR):
-            self.__field.at(move.from_x, move.from_y).change_type(CheckerType.BLACK_QUEEN)
+        if (moving_type == CheckerType.WHITE_REGULAR and move.to_y == 0):
+            is_queen_promotion = True
+            moving_type = CheckerType.WHITE_QUEEN
+        elif (moving_type == CheckerType.BLACK_REGULAR and move.to_y == self.__field.y_size - 1):
+            is_queen_promotion = True
+            moving_type = CheckerType.BLACK_QUEEN
+
+        # Изменение типа шашки при промоушне
+        if (is_queen_promotion):
+            self.__field.at(move.from_x, move.from_y).change_type(moving_type)
 
         # Изменение позиции шашки
         self.__field.at(move.to_x, move.to_y).change_type(self.__field.type_at(move.from_x, move.from_y))
@@ -358,37 +360,29 @@ class Game:
         best_moves = []
 
         for move in moves_list:
-            # Совершаем ход
             self.__handle_move(move, draw=False)
-
-            # Запускаем минимакс с альфа-бета отсечением
             score = self.__minimax(side, max_depth - 1, -inf, inf, False)
-
-            # Восстанавливаем поле
             self.__field = Field.copy(field_copy)
 
             if (score > best_score):
                 best_score = score
-                best_moves = [[move]]
+                best_moves = [move]
             elif (score == best_score):
-                best_moves.append([move])
+                best_moves.append(move)
 
-        # Обработка результатов с учётом случайности для низких уровней
-        optimal_move = []
+        selected_moves = []
         if (best_moves):
-            selected_moves = choice(best_moves)
-            for move in selected_moves:
-                # Добавление случайности для лёгких уровней
+            for move in best_moves:
                 if (self.__difficulty == DifficultyType.EASY and random() < 0.3):
                     continue
                 elif (self.__difficulty == DifficultyType.MEDIUM and random() < 0.1):
                     continue
-                optimal_move.append(move)
+                selected_moves.append(move)
 
-            if not (optimal_move) and best_moves:
-                optimal_move = [choice(best_moves)[0]]
+            if not (selected_moves):
+                selected_moves = [choice(best_moves)]
 
-        return optimal_move
+        return selected_moves
 
     def __minimax(self, side: SideType, depth: int, alpha: float, beta: float, is_maximizing: bool) -> float:
         '''Минимакс с альфа-бета отсечением'''
