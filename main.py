@@ -65,16 +65,15 @@ def main():
         status_label.config(text=f'Ход: {player_name}')
 
     def set_difficulty(difficulty: DifficultyType):
-        nonlocal game
         result = messagebox.askyesno("Новая игра",
             f"Изменить уровень сложности на {difficulty.name_ru}?\nТекущая игра будет перезапущена.")
         if result:
             difficulty_index = list(DifficultyType).index(difficulty)
             difficulty_var.set(difficulty_index)
             settings.difficulty = difficulty_index
-            game = Game(main_canvas, X_SIZE, Y_SIZE, difficulty, update_callback=lambda: update_status(game))
+            game[0] = Game(main_canvas, X_SIZE, Y_SIZE, difficulty, update_callback=on_update)
             difficulty_label.config(text=f'Сложность: {difficulty.name_ru}')
-            update_status(game)
+            update_status(game[0])
 
     # Добавление уровней сложности
     for diff in DifficultyType:
@@ -88,23 +87,20 @@ def main():
     game_menu.add_separator()
 
     def toggle_sounds():
-        nonlocal game
-        game.toggle_sounds()
-        settings.sounds_enabled = game.sounds_enabled
-        sounds_text = "Вкл" if game.sounds_enabled else "Выкл"
+        game[0].toggle_sounds()
+        settings.sounds_enabled = game[0].sounds_enabled
+        sounds_text = "Вкл" if game[0].sounds_enabled else "Выкл"
         sound_label.config(text=f'🔊 Звук: {sounds_text}')
 
     def show_hint():
-        nonlocal game
-        game.show_hint()
+        game[0].show_hint()
 
     def restart_game():
-        nonlocal game
         result = messagebox.askyesno("Новая игра", "Начать новую игру?")
         if result:
             difficulty = list(DifficultyType)[difficulty_var.get()]
-            game = Game(main_canvas, X_SIZE, Y_SIZE, difficulty, update_callback=lambda: update_status(game))
-            update_status(game)
+            game[0] = Game(main_canvas, X_SIZE, Y_SIZE, difficulty, update_callback=on_update)
+            update_status(game[0])
 
     game_menu.add_command(label="💡 Подсказка", command=show_hint)
     game_menu.add_command(label="🔊 Звук", command=toggle_sounds)
@@ -119,18 +115,22 @@ def main():
     from checkers.enums import SideType
     from checkers.constants import PLAYER_SIDE
     saved_difficulty = list(DifficultyType)[settings.difficulty]
-    game = Game(main_canvas, X_SIZE, Y_SIZE, saved_difficulty, update_callback=lambda: update_status(game))
+    game = [None]  # mutable container to avoid free variable issue
+    def on_update():
+        if game[0] is not None:
+            update_status(game[0])
+    game[0] = Game(main_canvas, X_SIZE, Y_SIZE, saved_difficulty, update_callback=on_update)
 
-    main_canvas.bind("<Motion>", game.mouse_move)
-    main_canvas.bind("<Button-1>", game.mouse_down)
+    main_canvas.bind("<Motion>", game[0].mouse_move)
+    main_canvas.bind("<Button-1>", game[0].mouse_down)
 
     # Горячие клавиши
-    main_window.bind("<Control-h>", lambda e: game.show_hint())  # Подсказка
+    main_window.bind("<Control-h>", lambda e: game[0].show_hint())  # Подсказка
     main_window.bind("<Control-n>", lambda e: restart_game())    # Новая игра
     main_window.bind("<Control-s>", lambda e: toggle_sounds())   # Звук
-    main_window.bind("<Escape>", lambda e: game.hide_hint())     # Скрыть подсказку
+    main_window.bind("<Escape>", lambda e: game[0].hide_hint())     # Скрыть подсказку
 
-    update_status(game)
+    update_status(game[0])
 
     main_window.mainloop()
 
