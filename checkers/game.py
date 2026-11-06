@@ -75,6 +75,8 @@ class Game:
         self.__hint_move = None
         # Шашка, которой обязательно продолжать серию взятий (None, если серии нет)
         self.__must_continue_from = None
+        # История позиций для отмены хода
+        self.__history = []
 
         self.__sound_manager = SoundManager()
         if not sounds_enabled:
@@ -257,6 +259,10 @@ class Game:
 
             # Если нажатие по ячейке, на которую можно походить
             if (move in self.__get_available_moves(PLAYER_SIDE)):
+                # Начало хода игрока: сохранить позицию для отмены
+                if (self.__must_continue_from is None):
+                    self.__save_snapshot()
+
                 self.__handle_player_turn(move)
 
                 # Если не ход игрока, то ход противника
@@ -348,6 +354,11 @@ class Game:
         self.__player_turn = False
         enemy_side = SideType.opposite(PLAYER_SIDE)
 
+        # У противника нет ходов — он проиграл
+        if not (self.__get_moves_list(enemy_side)):
+            self.__finish_game(enemy_side)
+            return
+
         # Выполнять ходы, пока идёт обязательная серия взятий
         while True:
             available_moves = self.__get_available_moves(enemy_side)
@@ -375,39 +386,30 @@ class Game:
 
         self.__player_turn = True
 
-        self.__check_for_game_over()
+        # После хода противника очередь игрока: если у него нет ходов — он проиграл
+        if not (self.__get_moves_list(PLAYER_SIDE)):
+            self.__finish_game(PLAYER_SIDE)
 
-    def __check_for_game_over(self):
-        '''Проверка на конец игры'''
-        game_over = False
+    def __finish_game(self, loser_side: SideType):
+        '''Завершить игру: показать победителя и начать новую партию'''
+        winner_name = 'Белые' if loser_side == SideType.BLACK else 'Чёрные'
+        messagebox.showinfo('Конец игры', f'{winner_name} выиграли')
 
-        white_moves_list = self.__get_moves_list(SideType.WHITE)
-        if not (white_moves_list):
-            # Белые проиграли
-            messagebox.showinfo('Конец игры', 'Чёрные выиграли')
-            game_over = True
+        # Новая игра с сохранением уровня сложности
+        self.__field = Field(self.__field.x_size, self.__field.y_size)
+        self.__player_turn = True
+        self.__hovered_cell = Point()
+        self.__selected_cell = Point()
+        self.__animated_cell = Point()
+        self.__must_continue_from = None
+        self.__last_move = None
+        self.__hint_move = None
+        self.__history.clear()
+        self.__draw()
 
-        black_moves_list = self.__get_moves_list(SideType.BLACK)
-        if not (black_moves_list):
-            # Чёрные проиграли
-            messagebox.showinfo('Конец игры', 'Белые выиграли')
-            game_over = True
-
-        if (game_over):
-            # Новая игра с сохранением уровня сложности
-            self.__field = Field(self.__field.x_size, self.__field.y_size)
-            self.__player_turn = True
-            self.__hovered_cell = Point()
-            self.__selected_cell = Point()
-            self.__animated_cell = Point()
-            self.__must_continue_from = None
-            self.__last_move = None
-            self.__hint_move = None
-            self.__draw()
-
-            # Если игрок играет за чёрных, то совершить ход противника
-            if (PLAYER_SIDE == SideType.BLACK):
-                self.__handle_enemy_turn()
+        # Если игрок играет за чёрных, то совершить ход противника
+        if (PLAYER_SIDE == SideType.BLACK):
+            self.__handle_enemy_turn()
 
     def __get_available_moves(self, side: SideType) -> list[Move]:
         '''Получить доступные ходы с учётом обязательного продолжения серии взятий'''
@@ -693,7 +695,8 @@ class Game:
 
         for move in moves_list:
             self.__handle_move(move, draw=False)
-            score = self.__minimax(side, 2, -inf, inf, True)
+            # После хода игрока ходит противник, поэтому минимизируем
+            score = self.__minimax(side, 2, -inf, inf, False)
             self.__field = Field.copy(field_copy)
 
             if (score > best_score):
