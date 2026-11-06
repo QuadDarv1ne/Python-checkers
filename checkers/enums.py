@@ -31,8 +31,8 @@ class DifficultyType(Enum):
         return {
             DifficultyType.EASY: 1,
             DifficultyType.MEDIUM: 2,
-            DifficultyType.HARD: 4,
-            DifficultyType.GRANDMASTER: 6
+            DifficultyType.HARD: 3,
+            DifficultyType.GRANDMASTER: 4
         }[self]
 
     @property

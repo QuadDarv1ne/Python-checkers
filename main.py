@@ -1,7 +1,8 @@
 from tkinter import Tk, Canvas, PhotoImage, Menu, messagebox, IntVar, Frame, Label
+
 from checkers.game import Game
-from checkers.constants import X_SIZE, Y_SIZE, CELL_SIZE, DEFAULT_DIFFICULTY
-from checkers.enums import DifficultyType
+from checkers.constants import X_SIZE, Y_SIZE, CELL_SIZE, PLAYER_SIDE
+from checkers.enums import DifficultyType, SideType
 from checkers.settings import Settings
 
 def main():
@@ -51,18 +52,38 @@ def main():
     # Переменная для хранения текущего уровня сложности
     difficulty_var = IntVar(value=settings.difficulty)
 
-    def update_status(game_instance):
+    # Создание холста
+    main_canvas = Canvas(main_window, width=CELL_SIZE * X_SIZE, height=CELL_SIZE * Y_SIZE)
+    main_canvas.pack()
+
+    # Изменяемый контейнер для текущей игры
+    game = [None]
+
+    def update_status():
         '''Обновление статуса игры'''
-        white_count = game_instance.white_checkers_count
-        black_count = game_instance.black_checkers_count
+        current_game = game[0]
+        if current_game is None:
+            return
+
+        white_count = current_game.white_checkers_count
+        black_count = current_game.black_checkers_count
         white_checkers_label.config(text=f'⚪ Белые: {white_count}')
         black_checkers_label.config(text=f'⚫ Чёрные: {black_count}')
 
-        if game_instance.is_player_turn:
+        if current_game.is_player_turn:
             player_name = "Белые" if PLAYER_SIDE == SideType.WHITE else "Чёрные"
         else:
             player_name = "Чёрные" if PLAYER_SIDE == SideType.WHITE else "Белые"
         status_label.config(text=f'Ход: {player_name}')
+
+    def on_update():
+        update_status()
+
+    def new_game(difficulty: DifficultyType):
+        '''Создать новую игру с указанным уровнем сложности'''
+        game[0] = Game(main_canvas, X_SIZE, Y_SIZE, difficulty, update_callback=on_update, sounds_enabled=settings.sounds_enabled)
+        difficulty_label.config(text=f'Сложность: {difficulty.name_ru}')
+        update_status()
 
     def set_difficulty(difficulty: DifficultyType):
         result = messagebox.askyesno("Новая игра",
@@ -71,9 +92,7 @@ def main():
             difficulty_index = list(DifficultyType).index(difficulty)
             difficulty_var.set(difficulty_index)
             settings.difficulty = difficulty_index
-            game[0] = Game(main_canvas, X_SIZE, Y_SIZE, difficulty, update_callback=on_update)
-            difficulty_label.config(text=f'Сложность: {difficulty.name_ru}')
-            update_status(game[0])
+            new_game(difficulty)
 
     # Добавление уровней сложности
     for diff in DifficultyType:
@@ -99,8 +118,7 @@ def main():
         result = messagebox.askyesno("Новая игра", "Начать новую игру?")
         if result:
             difficulty = list(DifficultyType)[difficulty_var.get()]
-            game[0] = Game(main_canvas, X_SIZE, Y_SIZE, difficulty, update_callback=on_update)
-            update_status(game[0])
+            new_game(difficulty)
 
     game_menu.add_command(label="💡 Подсказка", command=show_hint)
     game_menu.add_command(label="🔊 Звук", command=toggle_sounds)
@@ -108,29 +126,18 @@ def main():
     game_menu.add_separator()
     game_menu.add_command(label="Выход", command=main_window.quit)
 
-    # Создание холста
-    main_canvas = Canvas(main_window, width=CELL_SIZE * X_SIZE, height=CELL_SIZE * Y_SIZE)
-    main_canvas.pack()
-
-    from checkers.enums import SideType
-    from checkers.constants import PLAYER_SIDE
-    saved_difficulty = list(DifficultyType)[settings.difficulty]
-    game = [None]  # mutable container to avoid free variable issue
-    def on_update():
-        if game[0] is not None:
-            update_status(game[0])
-    game[0] = Game(main_canvas, X_SIZE, Y_SIZE, saved_difficulty, update_callback=on_update)
-
-    main_canvas.bind("<Motion>", game[0].mouse_move)
-    main_canvas.bind("<Button-1>", game[0].mouse_down)
+    # Привязки обращаются к текущей игре через контейнер, поэтому перезапуск их не ломает
+    main_canvas.bind("<Motion>", lambda event: game[0].mouse_move(event))
+    main_canvas.bind("<Button-1>", lambda event: game[0].mouse_down(event))
 
     # Горячие клавиши
-    main_window.bind("<Control-h>", lambda e: game[0].show_hint())  # Подсказка
-    main_window.bind("<Control-n>", lambda e: restart_game())    # Новая игра
-    main_window.bind("<Control-s>", lambda e: toggle_sounds())   # Звук
-    main_window.bind("<Escape>", lambda e: game[0].hide_hint())     # Скрыть подсказку
+    main_window.bind("<Control-h>", lambda e: game[0].show_hint())   # Подсказка
+    main_window.bind("<Control-n>", lambda e: restart_game())        # Новая игра
+    main_window.bind("<Control-s>", lambda e: toggle_sounds())       # Звук
+    main_window.bind("<Escape>", lambda e: game[0].hide_hint())      # Скрыть подсказку
 
-    update_status(game[0])
+    # Первая игра
+    new_game(saved_difficulty)
 
     main_window.mainloop()
 

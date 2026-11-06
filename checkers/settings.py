@@ -10,13 +10,23 @@ class Settings:
     
     def __load(self) -> dict:
         '''Загрузить настройки из файла'''
+        settings = {}
         if self.__config_path.exists():
             try:
                 with open(self.__config_path, 'r') as f:
-                    return json.load(f)
+                    settings = json.load(f)
             except (json.JSONDecodeError, IOError):
-                pass
-        return {}
+                settings = {}
+
+        # Приводим загруженные значения к допустимым
+        if not isinstance(settings, dict):
+            settings = {}
+        try:
+            settings['difficulty'] = max(0, min(3, int(settings.get('difficulty', 1))))
+        except (TypeError, ValueError):
+            settings['difficulty'] = 1
+        settings['sounds_enabled'] = bool(settings.get('sounds_enabled', True))
+        return settings
     
     def save(self):
         '''Сохранить настройки в файл'''

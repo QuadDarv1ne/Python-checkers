@@ -18,6 +18,7 @@ class SoundManager:
 
     def __init__(self):
         self.__enabled = True
+        self.__playsound = None
         try:
             from playsound import playsound
             self.__playsound = playsound
@@ -31,7 +32,7 @@ class SoundManager:
 
     def play(self, sound_name: str):
         """Воспроизвести звук в отдельном потоке"""
-        if not self.__enabled:
+        if not self.__enabled or self.__playsound is None:
             return
 
         sound_path = self.__sounds.get(sound_name)
@@ -46,6 +47,8 @@ class SoundManager:
 
     def toggle(self):
         """Переключить состояние звуков"""
+        if self.__playsound is None:
+            return
         self.__enabled = not self.__enabled
 
     @property
@@ -57,7 +60,7 @@ class SoundManager:
         return "Вкл" if self.__enabled else "Выкл"
 
 class Game:
-    def __init__(self, canvas: Canvas, x_field_size: int, y_field_size: int, difficulty: DifficultyType = DEFAULT_DIFFICULTY, update_callback=None):
+    def __init__(self, canvas: Canvas, x_field_size: int, y_field_size: int, difficulty: DifficultyType = DEFAULT_DIFFICULTY, update_callback=None, sounds_enabled: bool = True):
         self.__canvas = canvas
         self.__field = Field(x_field_size, y_field_size)
         self.__difficulty = difficulty
@@ -70,8 +73,12 @@ class Game:
         self.__animated_cell = Point()
         self.__last_move = None
         self.__hint_move = None
+        # Шашка, которой обязательно продолжать серию взятий (None, если серии нет)
+        self.__must_continue_from = None
 
         self.__sound_manager = SoundManager()
+        if not sounds_enabled:
+            self.__sound_manager.toggle()
 
         self.__init_images()
 
@@ -120,6 +127,16 @@ class Game:
 
     def __draw_field_grid(self):
         '''Отрисовка сетки поля'''
+        # Список ходов игрока вычисляется один раз на всю отрисовку
+        player_moves_list = self.__get_available_moves(PLAYER_SIDE) if self.__selected_cell else []
+        hovered_moves = self.__get_hovered_cell_moves() if (self.__player_turn and not self.__selected_cell) else []
+
+        # Ходы выбранной шашки (только её)
+        selected_moves = [
+            move for move in player_moves_list
+            if self.__selected_cell.x == move.from_x and self.__selected_cell.y == move.from_y
+        ]
+
         for y in range(self.__field.y_size):
             for x in range(self.__field.x_size):
                 self.__canvas.create_rectangle(x * CELL_SIZE, y * CELL_SIZE, x * CELL_SIZE + CELL_SIZE, y * CELL_SIZE + CELL_SIZE, fill=FIELD_COLORS[(y + x) % 2], width=0, tag='boards')
@@ -135,16 +152,13 @@ class Game:
                     self.__canvas.create_rectangle(x * CELL_SIZE + BORDER_WIDTH // 2, y * CELL_SIZE + BORDER_WIDTH // 2, x * CELL_SIZE + CELL_SIZE - BORDER_WIDTH // 2, y * CELL_SIZE + CELL_SIZE - BORDER_WIDTH // 2, outline='#4a90d9', width=BORDER_WIDTH, tag='last_move_border')
 
                 # Отрисовка возможных точек перемещения, если есть выбранная ячейка
-                if (self.__selected_cell):
-                    player_moves_list = self.__get_moves_list(PLAYER_SIDE)
-                    for move in player_moves_list:
-                        if (self.__selected_cell.x == move.from_x and self.__selected_cell.y == move.from_y):
-                            self.__canvas.create_oval(move.to_x * CELL_SIZE + CELL_SIZE / 3, move.to_y * CELL_SIZE + CELL_SIZE / 3, move.to_x * CELL_SIZE + (CELL_SIZE - CELL_SIZE / 3), move.to_y * CELL_SIZE + (CELL_SIZE - CELL_SIZE / 3), fill=POSIBLE_MOVE_CIRCLE_COLOR, width=0, tag='posible_move_circle' )
+                for move in selected_moves:
+                    if (x == move.to_x and y == move.to_y):
+                        self.__canvas.create_oval(move.to_x * CELL_SIZE + CELL_SIZE / 3, move.to_y * CELL_SIZE + CELL_SIZE / 3, move.to_x * CELL_SIZE + (CELL_SIZE - CELL_SIZE / 3), move.to_y * CELL_SIZE + (CELL_SIZE - CELL_SIZE / 3), fill=POSIBLE_MOVE_CIRCLE_COLOR, width=0, tag='posible_move_circle')
 
                 # Подсветка ходов при наведении на шашку игрока
-                if (self.__player_turn and not self.__selected_cell):
-                    hovered_moves = self.__get_hovered_cell_moves()
-                    for move in hovered_moves:
+                for move in hovered_moves:
+                    if (x == move.to_x and y == move.to_y):
                         # Подсветка клетки назначения полупрозрачным зелёным
                         self.__canvas.create_rectangle(
                             move.to_x * CELL_SIZE, move.to_y * CELL_SIZE,
@@ -180,6 +194,11 @@ class Game:
     def mouse_move(self, event: Event):
         '''Событие перемещения мышки'''
         x, y = (event.x) // CELL_SIZE, (event.y) // CELL_SIZE
+
+        # Если курсор вне поля, то сбросить наведение
+        if not (self.__field.is_within(x, y)):
+            x, y = -1, -1
+
         if (x != self.__hovered_cell.x or y != self.__hovered_cell.y):
             self.__hovered_cell = Point(x, y)
 
@@ -189,6 +208,10 @@ class Game:
 
     def __get_hovered_cell_moves(self) -> list[Move]:
         '''Получить ходы для шашки под курсором'''
+        # Если курсор вне поля, то ходов нет
+        if not (self.__field.is_within(self.__hovered_cell.x, self.__hovered_cell.y)):
+            return []
+
         if (PLAYER_SIDE == SideType.WHITE):
             player_checkers = WHITE_CHECKERS
         elif (PLAYER_SIDE == SideType.BLACK):
@@ -198,7 +221,7 @@ class Game:
 
         # Если под курсором шашка игрока
         if (self.__field.type_at(self.__hovered_cell.x, self.__hovered_cell.y) in player_checkers):
-            all_moves = self.__get_moves_list(PLAYER_SIDE)
+            all_moves = self.__get_available_moves(PLAYER_SIDE)
             return [m for m in all_moves if m.from_x == self.__hovered_cell.x and m.from_y == self.__hovered_cell.y]
         return []
 
@@ -223,6 +246,9 @@ class Game:
 
         # Если нажатие по шашке игрока, то выбрать её
         if (self.__field.type_at(x, y) in player_checkers):
+            # При обязательном продолжении серии можно выбрать только ту же шашку
+            if (self.__must_continue_from and (x != self.__must_continue_from.x or y != self.__must_continue_from.y)):
+                return
             self.__selected_cell = Point(x, y)
             self.__last_move = None  # Сброс выделения последнего хода
             self.__draw()
@@ -230,15 +256,15 @@ class Game:
             move = Move(self.__selected_cell.x, self.__selected_cell.y, x, y)
 
             # Если нажатие по ячейке, на которую можно походить
-            if (move in self.__get_moves_list(PLAYER_SIDE)):
+            if (move in self.__get_available_moves(PLAYER_SIDE)):
                 self.__handle_player_turn(move)
 
                 # Если не ход игрока, то ход противника
                 if not (self.__player_turn):
                     self.__handle_enemy_turn()
 
-    def __handle_move(self, move: Move, draw: bool = True) -> bool:
-        '''Совершение хода'''
+    def __handle_move(self, move: Move, draw: bool = True) -> tuple[bool, bool]:
+        '''Совершение хода. Возвращает (была ли съедена шашка, было ли превращение в дамку)'''
         if (draw): self.__animate_move(move)
 
         # Определение типа движения для звука и промоушна
@@ -287,34 +313,67 @@ class Game:
             self.__last_move = move
             self.__draw()
 
-        return has_killed_checker
+        return has_killed_checker, is_queen_promotion
 
     def __handle_player_turn(self, move: Move):
         '''Обработка хода игрока'''
         self.__player_turn = False
 
-        # Была ли убита шашка
-        has_killed_checker = self.__handle_move(move)
-
-        required_moves_list = list(filter(lambda required_move: move.to_x == required_move.from_x and move.to_y == required_move.from_y, self.__get_required_moves_list(PLAYER_SIDE)))
-        
-        # Если есть ещё ход этой же шашкой
-        if (has_killed_checker and required_moves_list):
-            self.__player_turn = True
+        # Был ли съеден кто-то и было ли превращение в дамку
+        has_killed_checker, is_queen_promotion = self.__handle_move(move)
 
         self.__selected_cell = Point()
+
+        # Если была съедена шашка и это не превращение, проверить обязательное продолжение
+        if (has_killed_checker and not is_queen_promotion):
+            required_moves_list = list(filter(
+                lambda required_move: move.to_x == required_move.from_x and move.to_y == required_move.from_y,
+                self.__get_required_moves_list(PLAYER_SIDE)
+            ))
+
+            # Если есть ещё ход этой же шашкой - обязать продолжить
+            if (required_moves_list):
+                self.__must_continue_from = Point(move.to_x, move.to_y)
+                self.__selected_cell = Point(move.to_x, move.to_y)
+                self.__player_turn = True
+                return
+
+        # Серия взятий завершена
+        self.__must_continue_from = None
 
     def __handle_enemy_turn(self):
         '''Обработка хода противника (компьютера)'''
         self.__player_turn = False
+        enemy_side = SideType.opposite(PLAYER_SIDE)
 
-        optimal_moves_list = self.__predict_optimal_moves(SideType.opposite(PLAYER_SIDE))
+        # Выполнять ходы, пока идёт обязательная серия взятий
+        while True:
+            available_moves = self.__get_available_moves(enemy_side)
+            if not (available_moves):
+                break
 
-        for move in optimal_moves_list:
-            self.__handle_move(move)
-            
+            move = self.__predict_optimal_move(enemy_side, available_moves)
+            if (move is None):
+                break
+
+            has_killed_checker, is_queen_promotion = self.__handle_move(move)
+
+            # Проверить необходимость продолжить серию той же шашкой
+            if (has_killed_checker and not is_queen_promotion):
+                required_moves_list = list(filter(
+                    lambda required_move: move.to_x == required_move.from_x and move.to_y == required_move.from_y,
+                    self.__get_required_moves_list(enemy_side)
+                ))
+                if (required_moves_list):
+                    self.__must_continue_from = Point(move.to_x, move.to_y)
+                    continue
+
+            self.__must_continue_from = None
+            break
+
+        self.__must_continue_from = None
         self.__player_turn = True
-        
+
         self.__check_for_game_over()
 
     def __check_for_game_over(self):
@@ -346,15 +405,29 @@ class Game:
             if (PLAYER_SIDE == SideType.BLACK):
                 self.__handle_enemy_turn()
 
-    def __predict_optimal_moves(self, side: SideType) -> list[Move]:
-        '''Предсказать оптимальный ход с помощью минимакса с альфа-бета отсечением'''
+    def __get_available_moves(self, side: SideType) -> list[Move]:
+        '''Получить доступные ходы с учётом обязательного продолжения серии взятий'''
+        moves_list = self.__get_moves_list(side)
+
+        # Если нужно продолжить серию взятий конкретной шашкой
+        if (self.__must_continue_from):
+            moves_list = list(filter(
+                lambda move: move.from_x == self.__must_continue_from.x and move.from_y == self.__must_continue_from.y,
+                moves_list
+            ))
+
+        return moves_list
+
+    def __predict_optimal_move(self, side: SideType, moves_list: list[Move] = None) -> Move:
+        '''Предсказать один оптимальный ход с помощью минимакса с альфа-бета отсечением'''
         max_depth = self.__difficulty.depth
         field_copy = Field.copy(self.__field)
 
         # Получаем все возможные ходы
-        moves_list = self.__get_moves_list(side)
+        if (moves_list is None):
+            moves_list = self.__get_available_moves(side)
         if not (moves_list):
-            return []
+            return None
 
         best_score = -inf
         best_moves = []
@@ -370,19 +443,22 @@ class Game:
             elif (score == best_score):
                 best_moves.append(move)
 
-        selected_moves = []
-        if (best_moves):
-            for move in best_moves:
-                if (self.__difficulty == DifficultyType.EASY and random() < 0.3):
-                    continue
-                elif (self.__difficulty == DifficultyType.MEDIUM and random() < 0.1):
-                    continue
-                selected_moves.append(move)
+        if not (best_moves):
+            return None
 
-            if not (selected_moves):
-                selected_moves = [choice(best_moves)]
+        # Небольшая случайность для лёгких уровней сложности
+        if (self.__difficulty == DifficultyType.EASY and len(best_moves) > 1 and random() < 0.3):
+            return choice(best_moves)
+        if (self.__difficulty == DifficultyType.MEDIUM and len(best_moves) > 1 and random() < 0.1):
+            return choice(best_moves)
 
-        return selected_moves
+        # Возвращаем ровно один ход
+        return choice(best_moves)
+
+    def __predict_optimal_moves(self, side: SideType) -> list[Move]:
+        '''Предсказать один оптимальный ход (совместимость)'''
+        move = self.__predict_optimal_move(side)
+        return [move] if move else []
 
     def __minimax(self, side: SideType, depth: int, alpha: float, beta: float, is_maximizing: bool) -> float:
         '''Минимакс с альфа-бета отсечением'''
@@ -513,7 +589,7 @@ class Game:
                         has_enemy_checker_on_way = False
 
                         for shift in range(1, self.__field.size):
-                            if not (self.__field.is_within(x + offset.x * shift, y + offset.y * shift)): continue
+                            if not (self.__field.is_within(x + offset.x * shift, y + offset.y * shift)): break
 
                             # Если на пути не было вражеской шашки
                             if (not has_enemy_checker_on_way):
@@ -560,7 +636,7 @@ class Game:
                         if not (self.__field.is_within(x + offset.x, y + offset.y)): continue
 
                         for shift in range(1, self.__field.size):
-                            if not (self.__field.is_within(x + offset.x * shift, y + offset.y * shift)): continue
+                            if not (self.__field.is_within(x + offset.x * shift, y + offset.y * shift)): break
 
                             if (self.__field.type_at(x + offset.x * shift, y + offset.y * shift) == CheckerType.NONE):
                                 moves_list.append(Move(x, y, x + offset.x * shift, y + offset.y * shift))
@@ -603,7 +679,7 @@ class Game:
         else:
             side = SideType.BLACK
 
-        moves_list = self.__get_moves_list(side)
+        moves_list = self.__get_available_moves(side)
         if not (moves_list):
             return None
 
