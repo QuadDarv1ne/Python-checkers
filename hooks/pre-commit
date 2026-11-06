@@ -1,0 +1,25 @@
+#!/bin/sh
+# Auto-stage all working-tree changes before each commit.
+# Enabled via: git config core.hooksPath hooks
+# Skip once with: SKIP_AUTO_ADD=1 git commit ...
+#
+# git add -A respects .gitignore, so caches, IDE files and config.json stay out.
+
+if [ "${SKIP_AUTO_ADD:-0}" = "1" ]; then
+  echo "pre-commit: auto-add skipped (SKIP_AUTO_ADD=1)"
+  exit 0
+fi
+
+tmp=$(mktemp)
+git diff --cached --name-only > "$tmp"
+git add -A
+# Report what got staged by this hook, if anything new appeared
+newly_staged=$(git diff --cached --name-only | grep -vxF -f "$tmp")
+rm -f "$tmp"
+
+if [ -n "$newly_staged" ]; then
+  echo "pre-commit: auto-added to index:"
+  printf '  %s\n' $newly_staged
+fi
+
+exit 0

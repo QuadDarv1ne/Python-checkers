@@ -1,10 +1,42 @@
+﻿# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.DS_Store
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+env/
+ENV/
+
+# Сборка PyInstaller
 dist/
 build/
 *.spec
+*.manifest
+
+# Локальные настройки игры
 config.json
+
+# IDE / редакторы
+.idea/
 .vscode/
+*.swp
+*.swo
+*~
+
+# ОС
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Логи и временные файлы
+*.log
+*.tmp
+*.bak
+

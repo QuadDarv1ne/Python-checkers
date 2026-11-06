@@ -1,4 +1,4 @@
-from tkinter import Canvas, Event, messagebox
+﻿from tkinter import Canvas, Event, messagebox
 from PIL import Image, ImageTk
 from random import choice, random
 from pathlib import Path
@@ -336,6 +336,8 @@ class Game:
                 self.__must_continue_from = Point(move.to_x, move.to_y)
                 self.__selected_cell = Point(move.to_x, move.to_y)
                 self.__player_turn = True
+                # Перерисовать, чтобы сразу показать доступные продолжения
+                self.__draw()
                 return
 
         # Серия взятий завершена
@@ -371,7 +373,6 @@ class Game:
             self.__must_continue_from = None
             break
 
-        self.__must_continue_from = None
         self.__player_turn = True
 
         self.__check_for_game_over()
@@ -399,6 +400,9 @@ class Game:
             self.__hovered_cell = Point()
             self.__selected_cell = Point()
             self.__animated_cell = Point()
+            self.__must_continue_from = None
+            self.__last_move = None
+            self.__hint_move = None
             self.__draw()
 
             # Если игрок играет за чёрных, то совершить ход противника
@@ -712,4 +716,3 @@ class Game:
     @property
     def hint_move(self):
         '''Ход-подсказка'''
-        return self.__hint_move

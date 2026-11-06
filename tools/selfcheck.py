@@ -129,8 +129,35 @@ def test_ai_single_move():
     root.destroy()
 
 
+def test_ai_forced_capture_sequence():
+    print("[5] ИИ завершает обязательную серию взятий")
+    root = tk.Tk()
+    root.withdraw()
+    canvas = tk.Canvas(root, width=600, height=600)
+    game = Game(canvas, 8, 8, DifficultyType.EASY, sounds_enabled=False)
+
+    field = Field(8, 8)
+    for y in range(8):
+        for x in range(8):
+            field.at(x, y).change_type(CheckerType.NONE)
+    # Игрок — белые. Ход ИИ (чёрные): чёрная (2,2) бьёт белую (3,3), затем белую (5,5)
+    field.at(2, 2).change_type(CheckerType.BLACK_REGULAR)
+    field.at(3, 3).change_type(CheckerType.WHITE_REGULAR)
+    field.at(5, 5).change_type(CheckerType.WHITE_REGULAR)
+    # Запасная белая шашка, чтобы партия не завершилась и не сбросила поле
+    field.at(7, 7).change_type(CheckerType.WHITE_REGULAR)
+    game._Game__field = field
+
+    game._Game__handle_enemy_turn()
+
+    check("ИИ съел обе белые из серии", game.white_checkers_count == 1)
+    check("серия сброшена", game._Game__must_continue_from is None)
+    check("ход вернулся игроку", game.is_player_turn is True)
+    root.destroy()
+
+
 def test_field_copy():
-    print("[5] Копирование поля независимо")
+    print("[6] Копирование поля независимо")
     field = Field(8, 8)
     copy = Field.copy(field)
     copy.at(0, 5).change_type(CheckerType.NONE)
@@ -144,6 +171,7 @@ def main():
     test_queen_moves_no_crash()
     test_forced_continuation()
     test_ai_single_move()
+    test_ai_forced_capture_sequence()
     test_field_copy()
     print("=== Итог ===")
     print(f"Пройдено: {len(PASSED)}, провалено: {len(FAILED)}")
