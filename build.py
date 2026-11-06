@@ -1,9 +1,58 @@
 import os
 import platform
+import shutil
+import subprocess
+import sys
+from pathlib import Path
 
-system = platform.system()
+ROOT = Path(__file__).resolve().parent
+ASSETS_DIR = ROOT / 'assets'
+DIST_DIR = ROOT / 'dist'
 
-if (system == 'Windows'):
-    os.system('pyinstaller -F -w -i icon.ico main.py --hidden-import="PIL._tkinter_finder" --hidden-import="playsound" && xcopy /Y /I "assets\\" "dist\\assets\\" && xcopy /Y "icon.png" "dist\\"')
-elif (system == 'Linux'):
-    os.system('pyinstaller -F -w -i icon.png main.py --hidden-import="PIL._tkinter_finder" --hidden-import="playsound" && /bin/cp -rf assets/ dist/ && /bin/cp -f icon.png dist/')
+
+def run(command: list):
+    '''Запустить команду и остановиться при ошибке'''
+    print('>', ' '.join(command))
+    subprocess.run(command, check=True, cwd=str(ROOT))
+
+
+def main():
+    system = platform.system()
+
+    if system == 'Windows':
+        icon = ROOT / 'icon.ico'
+    elif system == 'Linux':
+        icon = ROOT / 'icon.png'
+    else:
+        print(f'Неподдерживаемая система: {system}')
+        return 1
+
+    if not icon.exists():
+        print(f'Не найден файл иконки: {icon}')
+        return 1
+
+    # Сборка
+    run([
+        sys.executable, '-m', 'PyInstaller',
+        '-F', '-w',
+        '-i', str(icon),
+        '--hidden-import=PIL._tkinter_finder',
+        '--hidden-import=playsound',
+        '--distpath', str(DIST_DIR),
+        '--workpath', str(ROOT / 'build'),
+        '--specpath', str(ROOT),
+        str(ROOT / 'main.py'),
+    ])
+
+    # Копирование ресурсов рядом с исполняемым файлом
+    if ASSETS_DIR.exists():
+        shutil.copytree(ASSETS_DIR, DIST_DIR / 'assets', dirs_exist_ok=True)
+    shutil.copy2(ROOT / 'icon.png', DIST_DIR / 'icon.png')
+
+    print('Сборка завершена:', DIST_DIR)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
+

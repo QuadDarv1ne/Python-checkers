@@ -4,6 +4,29 @@ from checkers.game import Game
 from checkers.constants import X_SIZE, Y_SIZE, CELL_SIZE, PLAYER_SIDE
 from checkers.enums import DifficultyType, SideType
 from checkers.settings import Settings
+from checkers.paths import ICON_PATH
+
+
+def _set_icon(window: Tk):
+    '''Установить иконку окна, если файл доступен'''
+    try:
+        if ICON_PATH.exists():
+            icon = PhotoImage(file=str(ICON_PATH))
+            window.iconphoto(False, icon)
+            # Сохранить ссылку, чтобы сборщик мусора не удалил изображение
+            window._icon_image = icon
+    except Exception:
+        # Иконка не критична для работы приложения
+        pass
+
+
+def _difficulty_by_index(index: int) -> DifficultyType:
+    '''Получить уровень сложности по индексу с защитой от некорректного значения'''
+    difficulties = list(DifficultyType)
+    if not isinstance(index, int) or not (0 <= index < len(difficulties)):
+        index = 0
+    return difficulties[index]
+
 
 def main():
     # Загрузка настроек
@@ -13,7 +36,7 @@ def main():
     main_window = Tk()
     main_window.title('Шашки')
     main_window.resizable(0, 0)
-    main_window.iconphoto(False, PhotoImage(file='icon.png'))
+    _set_icon(main_window)
 
     # Создание фрейма для статуса
     status_frame = Frame(main_window, bg='#f0f0f0')
@@ -23,7 +46,7 @@ def main():
     status_label = Label(status_frame, text='Ход: Белые', font=('Arial', 12, 'bold'), bg='#f0f0f0')
     status_label.pack(side='left', padx=10, pady=5)
 
-    saved_difficulty = list(DifficultyType)[settings.difficulty]
+    saved_difficulty = _difficulty_by_index(settings.difficulty)
     difficulty_label = Label(status_frame, text=f'Сложность: {saved_difficulty.name_ru}', font=('Arial', 10), bg='#f0f0f0')
     difficulty_label.pack(side='left', padx=10, pady=5)
 
@@ -114,12 +137,16 @@ def main():
     def show_hint():
         game[0].show_hint()
 
+    def undo_move():
+        game[0].undo()
+
     def restart_game():
         result = messagebox.askyesno("Новая игра", "Начать новую игру?")
         if result:
-            difficulty = list(DifficultyType)[difficulty_var.get()]
+            difficulty = _difficulty_by_index(difficulty_var.get())
             new_game(difficulty)
 
+    game_menu.add_command(label="↩ Отменить ход", command=undo_move)
     game_menu.add_command(label="💡 Подсказка", command=show_hint)
     game_menu.add_command(label="🔊 Звук", command=toggle_sounds)
     game_menu.add_command(label="Новая игра", command=restart_game)
@@ -131,6 +158,7 @@ def main():
     main_canvas.bind("<Button-1>", lambda event: game[0].mouse_down(event))
 
     # Горячие клавиши
+    main_window.bind("<Control-z>", lambda e: game[0].undo())        # Отменить ход
     main_window.bind("<Control-h>", lambda e: game[0].show_hint())   # Подсказка
     main_window.bind("<Control-n>", lambda e: restart_game())        # Новая игра
     main_window.bind("<Control-s>", lambda e: toggle_sounds())       # Звук

@@ -1,7 +1,6 @@
-﻿from tkinter import Canvas, Event, messagebox
+from tkinter import Canvas, Event, messagebox
 from PIL import Image, ImageTk
 from random import choice, random
-from pathlib import Path
 from time import sleep
 from math import inf
 import threading
@@ -10,6 +9,7 @@ from checkers.field import Field
 from checkers.move import Move
 from checkers.constants import *
 from checkers.enums import CheckerType, SideType, DifficultyType
+from checkers.paths import asset_path
 
 from PIL.Image import LANCZOS as ANTIALIAS
 
@@ -23,9 +23,9 @@ class SoundManager:
             from playsound import playsound
             self.__playsound = playsound
             self.__sounds = {
-                'move': str(Path('assets', 'move.wav')),
-                'capture': str(Path('assets', 'capture.wav')),
-                'queen': str(Path('assets', 'queen.wav'))
+                'move': str(asset_path('move.wav')),
+                'capture': str(asset_path('capture.wav')),
+                'queen': str(asset_path('queen.wav'))
             }
         except ImportError:
             self.__enabled = False
@@ -91,13 +91,37 @@ class Game:
             self.__handle_enemy_turn()
 
     def __init_images(self):
-        '''Инициализация изображений'''
-        self.__images = {
-            CheckerType.WHITE_REGULAR: ImageTk.PhotoImage(Image.open(Path('assets', 'white-regular.png')).resize((CELL_SIZE, CELL_SIZE), ANTIALIAS)),
-            CheckerType.BLACK_REGULAR: ImageTk.PhotoImage(Image.open(Path('assets', 'black-regular.png')).resize((CELL_SIZE, CELL_SIZE), ANTIALIAS)),
-            CheckerType.WHITE_QUEEN: ImageTk.PhotoImage(Image.open(Path('assets', 'white-queen.png')).resize((CELL_SIZE, CELL_SIZE), ANTIALIAS)),
-            CheckerType.BLACK_QUEEN: ImageTk.PhotoImage(Image.open(Path('assets', 'black-queen.png')).resize((CELL_SIZE, CELL_SIZE), ANTIALIAS)),
+        '''Инициализация изображений с запасным вариантом при отсутствии файлов'''
+        self.__images = {}
+        image_files = {
+            CheckerType.WHITE_REGULAR: 'white-regular.png',
+            CheckerType.BLACK_REGULAR: 'black-regular.png',
+            CheckerType.WHITE_QUEEN: 'white-queen.png',
+            CheckerType.BLACK_QUEEN: 'black-queen.png',
         }
+        for checker_type, filename in image_files.items():
+            path = asset_path(filename)
+            try:
+                image = Image.open(path).resize((CELL_SIZE, CELL_SIZE), ANTIALIAS)
+                self.__images[checker_type] = ImageTk.PhotoImage(image)
+            except (OSError, ValueError):
+                # Файл отсутствует или повреждён — шашка будет нарисована заглушкой
+                self.__images[checker_type] = None
+
+    def __draw_checker_at(self, x: int, y: int, checker_type: CheckerType, tag: str):
+        '''Нарисовать шашку: изображением или запасным кружком'''
+        image = self.__images.get(checker_type)
+        if image is not None:
+            self.__canvas.create_image(x * CELL_SIZE, y * CELL_SIZE, image=image, anchor='nw', tag=tag)
+        else:
+            # Заглушка, если файл изображения недоступен
+            fill = '#f5f5f5' if checker_type in WHITE_CHECKERS else '#333333'
+            outline = '#333333' if checker_type in WHITE_CHECKERS else '#f5f5f5'
+            self.__canvas.create_oval(
+                x * CELL_SIZE + CELL_SIZE * 0.15, y * CELL_SIZE + CELL_SIZE * 0.15,
+                x * CELL_SIZE + CELL_SIZE * 0.85, y * CELL_SIZE + CELL_SIZE * 0.85,
+                fill=fill, outline=outline, width=BORDER_WIDTH, tag=tag
+            )
 
     def __animate_move(self, move: Move):
         '''Анимация перемещения шашки'''
@@ -105,7 +129,17 @@ class Game:
         self.__draw()
 
         # Создание шашки для анимации
-        animated_checker = self.__canvas.create_image(move.from_x * CELL_SIZE, move.from_y * CELL_SIZE, image=self.__images.get(self.__field.type_at(move.from_x, move.from_y)), anchor='nw', tag='animated_checker')
+        checker_type = self.__field.type_at(move.from_x, move.from_y)
+        image = self.__images.get(checker_type)
+        if image is not None:
+            animated_checker = self.__canvas.create_image(move.from_x * CELL_SIZE, move.from_y * CELL_SIZE, image=image, anchor='nw', tag='animated_checker')
+        else:
+            fill = '#f5f5f5' if checker_type in WHITE_CHECKERS else '#333333'
+            animated_checker = self.__canvas.create_oval(
+                move.from_x * CELL_SIZE + CELL_SIZE * 0.15, move.from_y * CELL_SIZE + CELL_SIZE * 0.15,
+                move.from_x * CELL_SIZE + CELL_SIZE * 0.85, move.from_y * CELL_SIZE + CELL_SIZE * 0.85,
+                fill=fill, outline='#333333', width=BORDER_WIDTH, tag='animated_checker'
+            )
         
         # Вектора движения
         dx = 1 if move.from_x < move.to_x else -1
@@ -189,9 +223,10 @@ class Game:
         '''Отрисовка шашек'''
         for y in range(self.__field.y_size):
             for x in range(self.__field.x_size):
+                checker_type = self.__field.type_at(x, y)
                 # Не отрисовывать пустые ячейки и анимируемую шашку
-                if (self.__field.type_at(x, y) != CheckerType.NONE and not (x == self.__animated_cell.x and y == self.__animated_cell.y)):
-                    self.__canvas.create_image(x * CELL_SIZE, y * CELL_SIZE, image=self.__images.get(self.__field.type_at(x, y)), anchor='nw', tag='checkers')
+                if (checker_type != CheckerType.NONE and not (x == self.__animated_cell.x and y == self.__animated_cell.y)):
+                    self.__draw_checker_at(x, y, checker_type, 'checkers')
 
     def mouse_move(self, event: Event):
         '''Событие перемещения мышки'''
@@ -719,3 +754,35 @@ class Game:
     @property
     def hint_move(self):
         '''Ход-подсказка'''
+        return self.__hint_move
+
+    def __save_snapshot(self):
+        '''Сохранить снимок позиции для отмены хода'''
+        self.__history.append({
+            'field': Field.copy(self.__field),
+            'player_turn': self.__player_turn,
+        })
+        # Ограничить размер истории
+        if len(self.__history) > MAX_HISTORY:
+            self.__history.pop(0)
+
+    def undo(self):
+        '''Отменить последний ход (ход игрока и ответ противника)'''
+        if not (self.__history):
+            return
+
+        snapshot = self.__history.pop()
+        self.__field = snapshot['field']
+        self.__player_turn = snapshot['player_turn']
+        self.__selected_cell = Point()
+        self.__hovered_cell = Point()
+        self.__animated_cell = Point()
+        self.__must_continue_from = None
+        self.__last_move = None
+        self.__hint_move = None
+        self.__draw()
+
+    @property
+    def can_undo(self) -> bool:
+        '''Есть ли ход для отмены'''
+        return len(self.__history) > 0
