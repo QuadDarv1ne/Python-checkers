@@ -36,6 +36,21 @@ class DifficultyType(Enum):
         }[self]
 
     @property
+    def noise_scale(self):
+        '''Гауссов шум к оценке хода: чем больше, тем сильнее ИИ "ошибается".
+
+        Единицы измерения — единицы оценки позиции (шашка ≈ 1, дамка ≈ 3),
+        поэтому 0.5 на лёгком уровне регулярно допускает小幅но худшие ходы,
+        а 0 на гроссмейстере делает игру детерминированно сильной.
+        '''
+        return {
+            DifficultyType.EASY: 0.5,
+            DifficultyType.MEDIUM: 0.15,
+            DifficultyType.HARD: 0.03,
+            DifficultyType.GRANDMASTER: 0.0
+        }[self]
+
+    @property
     def name_ru(self):
         '''Название на русском'''
         return {

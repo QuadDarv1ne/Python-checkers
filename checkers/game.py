@@ -1,6 +1,6 @@
 from tkinter import Canvas, Event, messagebox
 from PIL import Image, ImageTk
-from random import choice, random
+from random import choice, gauss
 from time import sleep
 from math import inf
 import threading
@@ -14,29 +14,63 @@ from checkers.paths import asset_path
 from PIL.Image import LANCZOS as ANTIALIAS
 
 class SoundManager:
-    """Менеджер звуковых эффектов"""
+    """Менеджер звуковых эффектов.
+
+    На Windows звук идёт через winsound из стандартной библиотеки: он
+    асинхронный и не требует сторонних пакетов. На остальных системах
+    используется playsound, если он установлен; без него звуки просто
+    выключены, а игра работает как раньше.
+    """
+
+    SOUND_FILES = ('move', 'capture', 'queen')
 
     def __init__(self):
         self.__enabled = True
+        self.__winsound = None
         self.__playsound = None
+        self.__sounds = {}
+
         try:
-            from playsound import playsound
-            self.__playsound = playsound
-            self.__sounds = {
-                'move': str(asset_path('move.wav')),
-                'capture': str(asset_path('capture.wav')),
-                'queen': str(asset_path('queen.wav'))
-            }
+            import winsound
+            self.__winsound = winsound
         except ImportError:
-            self.__enabled = False
+            try:
+                from playsound import playsound
+                self.__playsound = playsound
+            except ImportError:
+                pass
+
+        for name in self.SOUND_FILES:
+            path = asset_path(f'{name}.wav')
+            if path.exists():
+                self.__sounds[name] = str(path)
+
+    @property
+    def available(self) -> bool:
+        '''Есть ли бэкенд и файлы для воспроизведения'''
+        return bool(self.__sounds) and (self.__winsound is not None or self.__playsound is not None)
 
     def play(self, sound_name: str):
-        """Воспроизвести звук в отдельном потоке"""
-        if not self.__enabled or self.__playsound is None:
+        """Воспроизвести звук, не блокируя игровой цикл"""
+        if not self.__enabled:
             return
 
         sound_path = self.__sounds.get(sound_name)
         if not sound_path:
+            return
+
+        if self.__winsound is not None:
+            try:
+                self.__winsound.PlaySound(
+                    sound_path,
+                    self.__winsound.SND_FILENAME | self.__winsound.SND_ASYNC | self.__winsound.SND_NODEFAULT
+                )
+            except RuntimeError:
+                # Файл повреждён или не проигрывается — звук не критичен
+                pass
+            return
+
+        if self.__playsound is None:
             return
 
         try:
@@ -47,9 +81,13 @@ class SoundManager:
 
     def toggle(self):
         """Переключить состояние звуков"""
-        if self.__playsound is None:
+        if not self.available:
             return
         self.__enabled = not self.__enabled
+
+    def set_enabled(self, enabled: bool):
+        """Явно включить или выключить звуки"""
+        self.__enabled = bool(enabled) and self.available
 
     @property
     def enabled(self):
@@ -57,6 +95,8 @@ class SoundManager:
 
     @property
     def enabled_str(self):
+        if not self.available:
+            return "Недоступен"
         return "Вкл" if self.__enabled else "Выкл"
 
 class Game:
@@ -79,8 +119,7 @@ class Game:
         self.__history = []
 
         self.__sound_manager = SoundManager()
-        if not sounds_enabled:
-            self.__sound_manager.toggle()
+        self.__sound_manager.set_enabled(sounds_enabled)
 
         self.__init_images()
 
@@ -472,11 +511,17 @@ class Game:
 
         best_score = -inf
         best_moves = []
+        noise_scale = self.__difficulty.noise_scale
 
         for move in moves_list:
             self.__handle_move(move, draw=False)
             score = self.__minimax(side, max_depth - 1, -inf, inf, False)
             self.__field = Field.copy(field_copy)
+
+            # Осмысленная случайность: шум к оценке позволяет лёгким уровням
+            # иногда выбирать объективно чуть худшие ходы, а не только равные
+            if noise_scale > 0:
+                score += gauss(0, noise_scale)
 
             if (score > best_score):
                 best_score = score
@@ -486,12 +531,6 @@ class Game:
 
         if not (best_moves):
             return None
-
-        # Небольшая случайность для лёгких уровней сложности
-        if (self.__difficulty == DifficultyType.EASY and len(best_moves) > 1 and random() < 0.3):
-            return choice(best_moves)
-        if (self.__difficulty == DifficultyType.MEDIUM and len(best_moves) > 1 and random() < 0.1):
-            return choice(best_moves)
 
         # Возвращаем ровно один ход
         return choice(best_moves)
@@ -556,7 +595,9 @@ class Game:
 
         # Позиционная оценка
         positional_bonus = 0
-        center_x, center_y = self.__field.x_size / 2, self.__field.y_size / 2
+        # Центр доски для клеток 0..N-1 лежит в (N-1)/2, иначе оценка
+        # асимметрична и нижний край ценится выше верхнего
+        center_x, center_y = (self.__field.x_size - 1) / 2, (self.__field.y_size - 1) / 2
 
         for y in range(self.__field.y_size):
             for x in range(self.__field.x_size):
@@ -576,11 +617,12 @@ class Game:
                             (WHITE_CHECKERS if side == SideType.WHITE else BLACK_CHECKERS)):
                             defense_bonus += 0.2
 
-                # Бонус за продвижение вперёд
+                # Бонус за продвижение вперёд — рассчитывается по направлению
+                # фактической стороны шашки, а не оцениваемой
                 advance_bonus = 0
-                if (side == SideType.WHITE):
+                if (checker_type in (CheckerType.WHITE_REGULAR, CheckerType.WHITE_QUEEN)):
                     advance_bonus = (self.__field.y_size - 1 - y) * 0.05
-                else:
+                elif (checker_type in (CheckerType.BLACK_REGULAR, CheckerType.BLACK_QUEEN)):
                     advance_bonus = y * 0.05
 
                 # Суммируем бонусы
@@ -712,6 +754,15 @@ class Game:
     @property
     def sounds_enabled(self) -> bool:
         return self.__sound_manager.enabled
+
+    @property
+    def sounds_enabled_str(self) -> str:
+        '''Название текущего состояния звуков ("Вкл"/"Выкл"/"Недоступен")'''
+        return self.__sound_manager.enabled_str
+
+    def toggle_sounds(self):
+        '''Переключить звуки'''
+        self.__sound_manager.toggle()
 
     def get_hint(self) -> Move:
         '''Получить подсказку - лучший ход для игрока'''

@@ -22,3 +22,11 @@ class Point:
             )
 
         return NotImplemented
+
+    def __hash__(self):
+        return hash((self.x, self.y))
+
+    def __ne__(self, other):
+        if isinstance(other, Point):
+            return not self.__eq__(other)
+        return NotImplemented

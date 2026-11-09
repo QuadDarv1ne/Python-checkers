@@ -82,9 +82,13 @@ def main():
     # Изменяемый контейнер для текущей игры
     game = [None]
 
+    def _game():
+        '''Получить текущую игру или None'''
+        return game[0]
+
     def update_status():
         '''Обновление статуса игры'''
-        current_game = game[0]
+        current_game = _game()
         if current_game is None:
             return
 
@@ -129,16 +133,22 @@ def main():
     game_menu.add_separator()
 
     def toggle_sounds():
-        game[0].toggle_sounds()
-        settings.sounds_enabled = game[0].sounds_enabled
-        sounds_text = "Вкл" if game[0].sounds_enabled else "Выкл"
+        g = _game()
+        if g is None: return
+        g.toggle_sounds()
+        settings.sounds_enabled = g.sounds_enabled
+        sounds_text = g.sounds_enabled_str
         sound_label.config(text=f'🔊 Звук: {sounds_text}')
 
     def show_hint():
-        game[0].show_hint()
+        g = _game()
+        if g is None: return
+        g.show_hint()
 
     def undo_move():
-        game[0].undo()
+        g = _game()
+        if g is None: return
+        g.undo()
 
     def restart_game():
         result = messagebox.askyesno("Новая игра", "Начать новую игру?")
@@ -153,16 +163,16 @@ def main():
     game_menu.add_separator()
     game_menu.add_command(label="Выход", command=main_window.quit)
 
-    # Привязки обращаются к текущей игре через контейнер, поэтому перезапуск их не ломает
-    main_canvas.bind("<Motion>", lambda event: game[0].mouse_move(event))
-    main_canvas.bind("<Button-1>", lambda event: game[0].mouse_down(event))
+    # Привязки обращаются к текущей игре через _game(), поэтому перезапуск их не ломает
+    main_canvas.bind("<Motion>", lambda event: _game().mouse_move(event) if _game() else None)
+    main_canvas.bind("<Button-1>", lambda event: _game().mouse_down(event) if _game() else None)
 
     # Горячие клавиши
-    main_window.bind("<Control-z>", lambda e: game[0].undo())        # Отменить ход
-    main_window.bind("<Control-h>", lambda e: game[0].show_hint())   # Подсказка
-    main_window.bind("<Control-n>", lambda e: restart_game())        # Новая игра
-    main_window.bind("<Control-s>", lambda e: toggle_sounds())       # Звук
-    main_window.bind("<Escape>", lambda e: game[0].hide_hint())      # Скрыть подсказку
+    main_window.bind("<Control-z>", lambda e: _game().undo() if _game() else None)        # Отменить ход
+    main_window.bind("<Control-h>", lambda e: _game().show_hint() if _game() else None)   # Подсказка
+    main_window.bind("<Control-n>", lambda e: restart_game())                              # Новая игра
+    main_window.bind("<Control-s>", lambda e: toggle_sounds())                             # Звук
+    main_window.bind("<Escape>", lambda e: _game().hide_hint() if _game() else None)       # Скрыть подсказку
 
     # Первая игра
     new_game(saved_difficulty)

@@ -32,17 +32,20 @@ def main():
         return 1
 
     # Сборка
-    run([
+    command = [
         sys.executable, '-m', 'PyInstaller',
         '-F', '-w',
         '-i', str(icon),
         '--hidden-import=PIL._tkinter_finder',
-        '--hidden-import=playsound',
         '--distpath', str(DIST_DIR),
         '--workpath', str(ROOT / 'build'),
         '--specpath', str(ROOT),
         str(ROOT / 'main.py'),
-    ])
+    ]
+    # playsound нужен только вне Windows (там используется winsound)
+    if system != 'Windows':
+        command.insert(command.index('--distpath'), '--hidden-import=playsound')
+    run(command)
 
     # Копирование ресурсов рядом с исполняемым файлом
     if ASSETS_DIR.exists():

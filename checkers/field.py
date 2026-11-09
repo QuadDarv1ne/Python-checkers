@@ -25,13 +25,16 @@ class Field:
 
     @classmethod
     def copy(cls, field_instance):
-        '''Создаёт копию поля из образца'''
-        field_copy = cls(field_instance.x_size, field_instance.y_size)
-
-        for y in range(field_instance.y_size):
-            for x in range(field_instance.x_size):
-                field_copy.at(x, y).change_type(field_instance.type_at(x, y))
-
+        '''Создаёт независимую копию поля из образца'''
+        field_copy = cls.__new__(cls)
+        field_copy._Field__x_size = field_instance.x_size
+        field_copy._Field__y_size = field_instance.y_size
+        # Копируем типы шашек напрямую, минуя __generate: иначе поле
+        # строится дважды на каждый просчитанный вариант в минимаксе
+        field_copy._Field__checkers = [
+            [Checker(field_instance.type_at(x, y)) for x in range(field_instance.x_size)]
+            for y in range(field_instance.y_size)
+        ]
         return field_copy
 
     def __generate(self):

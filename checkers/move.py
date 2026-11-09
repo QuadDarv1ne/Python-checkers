@@ -37,3 +37,11 @@ class Move:
             )
 
         return NotImplemented
+
+    def __hash__(self):
+        return hash((self.from_x, self.from_y, self.to_x, self.to_y))
+
+    def __ne__(self, other):
+        if isinstance(other, Move):
+            return not self.__eq__(other)
+        return NotImplemented

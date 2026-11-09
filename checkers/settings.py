@@ -3,7 +3,20 @@ import os
 import tempfile
 from pathlib import Path
 
+from checkers.enums import DifficultyType
 from checkers.paths import CONFIG_PATH
+
+DEFAULT_DIFFICULTY_INDEX = list(DifficultyType).index(DifficultyType.MEDIUM)
+
+
+def _clamp_difficulty(value) -> int:
+    '''Привести значение сложности к допустимому индексу DifficultyType'''
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_DIFFICULTY_INDEX
+    last_index = len(DifficultyType) - 1
+    return max(0, min(last_index, value))
 
 
 def _coerce_bool(value, default: bool = False) -> bool:
@@ -43,9 +56,9 @@ class Settings:
         if not isinstance(settings, dict):
             settings = {}
         try:
-            settings['difficulty'] = max(0, min(3, int(settings.get('difficulty', 1))))
+            settings['difficulty'] = _clamp_difficulty(settings.get('difficulty', DEFAULT_DIFFICULTY_INDEX))
         except (TypeError, ValueError):
-            settings['difficulty'] = 1
+            settings['difficulty'] = DEFAULT_DIFFICULTY_INDEX
         settings['sounds_enabled'] = _coerce_bool(settings.get('sounds_enabled', True), default=True)
         return settings
 
@@ -88,15 +101,11 @@ class Settings:
 
     @property
     def difficulty(self) -> int:
-        return self.get('difficulty', 1)  # Medium по умолчанию
+        return self.get('difficulty', DEFAULT_DIFFICULTY_INDEX)
 
     @difficulty.setter
     def difficulty(self, value: int):
-        try:
-            value = int(value)
-        except (TypeError, ValueError):
-            value = 1
-        self.set('difficulty', max(0, min(3, value)))
+        self.set('difficulty', _clamp_difficulty(value))
         self.save()
 
     @property
