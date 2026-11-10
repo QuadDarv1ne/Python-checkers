@@ -1,0 +1,39 @@
+{
+  "name": "Oreo · light",
+  "source": "https://vsthemes.org/cursors/static/18096-oreo.html",
+  "kinds": {
+    "arrow": {
+      "file": "arrow.png",
+      "hotspot": [
+        7,
+        1
+      ],
+      "size": [
+        46,
+        61
+      ]
+    },
+    "hand": {
+      "file": "hand.png",
+      "hotspot": [
+        18,
+        1
+      ],
+      "size": [
+        49,
+        55
+      ]
+    },
+    "wait": {
+      "file": "wait.png",
+      "hotspot": [
+        13,
+        12
+      ],
+      "size": [
+        28,
+        29
+      ]
+    }
+  }
+}

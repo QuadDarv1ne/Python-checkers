@@ -1,0 +1,39 @@
+{
+  "name": "Oreo · light_pink",
+  "source": "https://vsthemes.org/cursors/static/18096-oreo.html",
+  "kinds": {
+    "arrow": {
+      "file": "arrow.png",
+      "hotspot": [
+        25,
+        23
+      ],
+      "size": [
+        54,
+        55
+      ]
+    },
+    "hand": {
+      "file": "hand.png",
+      "hotspot": [
+        18,
+        1
+      ],
+      "size": [
+        49,
+        55
+      ]
+    },
+    "wait": {
+      "file": "wait.png",
+      "hotspot": [
+        13,
+        12
+      ],
+      "size": [
+        28,
+        29
+      ]
+    }
+  }
+}

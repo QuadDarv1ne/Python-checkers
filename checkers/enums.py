@@ -27,12 +27,22 @@ class DifficultyType(Enum):
 
     @property
     def depth(self):
-        '''Глубина просчёта ходов для каждого уровня сложности'''
+        '''Максимальная глубина просчёта для уровня'''
         return {
             DifficultyType.EASY: 1,
-            DifficultyType.MEDIUM: 2,
-            DifficultyType.HARD: 3,
-            DifficultyType.GRANDMASTER: 4
+            DifficultyType.MEDIUM: 3,
+            DifficultyType.HARD: 5,
+            DifficultyType.GRANDMASTER: 8
+        }[self]
+
+    @property
+    def time_limit(self):
+        '''Лимит времени на ход в секундах (итеративное углубление)'''
+        return {
+            DifficultyType.EASY: 0.35,
+            DifficultyType.MEDIUM: 1.2,
+            DifficultyType.HARD: 3.0,
+            DifficultyType.GRANDMASTER: 6.0
         }[self]
 
     @property
@@ -40,7 +50,7 @@ class DifficultyType(Enum):
         '''Гауссов шум к оценке хода: чем больше, тем сильнее ИИ "ошибается".
 
         Единицы измерения — единицы оценки позиции (шашка ≈ 1, дамка ≈ 3),
-        поэтому 0.5 на лёгком уровне регулярно допускает小幅но худшие ходы,
+        поэтому 0.5 на лёгком уровне регулярно допускает слегка худшие ходы,
         а 0 на гроссмейстере делает игру детерминированно сильной.
         '''
         return {

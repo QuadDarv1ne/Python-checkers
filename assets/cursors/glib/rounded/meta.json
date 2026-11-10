@@ -1,0 +1,39 @@
+{
+  "name": "Glib v3 · Rounded",
+  "source": "https://vsthemes.org/cursors/",
+  "kinds": {
+    "arrow": {
+      "file": "arrow.png",
+      "hotspot": [
+        5,
+        4
+      ],
+      "size": [
+        38,
+        55
+      ]
+    },
+    "hand": {
+      "file": "hand.png",
+      "hotspot": [
+        18,
+        3
+      ],
+      "size": [
+        43,
+        45
+      ]
+    },
+    "wait": {
+      "file": "wait.png",
+      "hotspot": [
+        23,
+        22
+      ],
+      "size": [
+        48,
+        48
+      ]
+    }
+  }
+}

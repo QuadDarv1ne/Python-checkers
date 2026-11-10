@@ -40,3 +40,8 @@ desktop.ini
 *.tmp
 *.bak
 
+# Исходные архивы наборов курсоров (результат лежит в assets/cursors)
+cursors/*.zip
+cursors/*.rar
+cursors/*.7z
+

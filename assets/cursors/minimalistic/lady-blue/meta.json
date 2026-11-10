@@ -1,0 +1,39 @@
+{
+  "name": "Minimal V5 · Lady Blue",
+  "source": "https://vsthemes.org/cursors/neon/76118-minimalistic-v5.html",
+  "kinds": {
+    "arrow": {
+      "file": "arrow.png",
+      "hotspot": [
+        3,
+        3
+      ],
+      "size": [
+        32,
+        41
+      ]
+    },
+    "hand": {
+      "file": "hand.png",
+      "hotspot": [
+        15,
+        3
+      ],
+      "size": [
+        36,
+        41
+      ]
+    },
+    "wait": {
+      "file": "wait.png",
+      "hotspot": [
+        24,
+        24
+      ],
+      "size": [
+        48,
+        48
+      ]
+    }
+  }
+}
