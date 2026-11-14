@@ -29,6 +29,13 @@ Turn = tuple
 # Границы таблицы транспозиций, чтобы память не росла бесконечно
 MAX_TRANSPOSITION_ENTRIES = 200_000
 
+# Конечная «оценка мата»: в IEEE-754 -inf + n == -inf, поэтому для различения
+# «проиграть быстрее / выиграть быстрее» нужна обычная большая константа
+MATE_SCORE = 1_000_000.0
+
+# Флаги записей таблицы транспозиций (значение относительно окна поиска)
+EXACT, LOWER_BOUND, UPPER_BOUND = 0, 1, 2
+
 
 @dataclass
 class SearchResult:
@@ -48,6 +55,8 @@ class SearchResult:
 def apply_turn(field: Field, turn: Turn, rules: R.RuleSet) -> dict:
     '''Выполнить полный ход и вернуть данные для отката'''
     legs = turn
+    if not legs:
+        raise ValueError('apply_turn: пустой ход')
     first = legs[0]
     start_type = field.type_at(first.from_x, first.from_y)
     side = SideType.WHITE if start_type in WHITE_CHECKERS else SideType.BLACK
@@ -61,9 +70,10 @@ def apply_turn(field: Field, turn: Turn, rules: R.RuleSet) -> dict:
                 continue
             seen.add(key)
             captured.append((point, field.type_at(point.x, point.y)))
-            # При турецком ударе шашка остаётся на доске до конца серии
-            if not rules.turkish_strike:
-                field.at(point.x, point.y).change_type(CheckerType.NONE)
+            # Turn — уже завершённая серия взятий, поэтому побитая шашка
+            # снимается всегда: между ходами она на доске быть не должна.
+            # Отложенный съём (турецкий удар) живёт на уровне game.py
+            field.at(point.x, point.y).change_type(CheckerType.NONE)
 
     last = legs[-1]
     promoted = False
@@ -102,11 +112,12 @@ def apply_move(field: Field, move: Move, rules: R.RuleSet) -> dict:
 # --- Генерация полных ходов --------------------------------------------------
 
 def _man_capture_turns(field: Field, x: int, y: int, side: SideType,
-                       rules: R.RuleSet, captured: set, path: list) -> list:
-    '''Все продолжения серии взятий простой шашкой'''
-    friendly = R.friendly_checkers(side)
+                       rules: R.RuleSet, captured: set, path: list,
+                       offsets: list = None) -> list:
+    '''Все продолжения серии взятий простой шашкой (или нелетающей дамки)'''
     enemy = R.enemy_checkers(side)
-    offsets = R.MOVE_OFFSETS if rules.men_capture_backward else R.forward_offsets(side)
+    if offsets is None:
+        offsets = R.MOVE_OFFSETS if rules.men_capture_backward else R.forward_offsets(side)
 
     continuations = []
     for offset in offsets:
@@ -122,10 +133,13 @@ def _man_capture_turns(field: Field, x: int, y: int, side: SideType,
             continue
 
         # Турецкий удар: побитая шашка остаётся на доске, поэтому её нужно
-        # временно убрать, иначе она загородит продолжение серии
+        # временно убрать, иначе она загородит продолжение серии.
+        # Типы сохраняем фактические: жертвой может быть и дамка
+        mover_type = field.type_at(x, y)
+        victim_type = field.type_at(mid_x, mid_y)
         field.at(mid_x, mid_y).change_type(CheckerType.NONE)
         field.at(x, y).change_type(CheckerType.NONE)
-        field.at(to_x, to_y).change_type(friendly[0])
+        field.at(to_x, to_y).change_type(mover_type)
 
         promoted = rules.promote_ends_chain and R.promotes(side, to_y, field.y_size)
         if promoted:
@@ -134,12 +148,12 @@ def _man_capture_turns(field: Field, x: int, y: int, side: SideType,
         else:
             deeper = _man_capture_turns(field, to_x, to_y, side, rules,
                                         captured | {(mid_x, mid_y)},
-                                        path + [Move(x, y, to_x, to_y)])
+                                        path + [Move(x, y, to_x, to_y)], offsets)
             continuations.extend(deeper or [path + [Move(x, y, to_x, to_y)]])
 
         field.at(to_x, to_y).change_type(CheckerType.NONE)
-        field.at(x, y).change_type(friendly[0])
-        field.at(mid_x, mid_y).change_type(enemy[0])
+        field.at(x, y).change_type(mover_type)
+        field.at(mid_x, mid_y).change_type(victim_type)
 
     return continuations
 
@@ -171,6 +185,8 @@ def _queen_capture_turns(field: Field, x: int, y: int, side: SideType,
             if checker_type != CheckerType.NONE:
                 break
 
+            # Типы сохраняем фактические: жертвой может быть и простая, и дамка
+            victim_type = field.type_at(victim[0], victim[1])
             field.at(victim[0], victim[1]).change_type(CheckerType.NONE)
             field.at(x, y).change_type(CheckerType.NONE)
             field.at(current_x, current_y).change_type(friendly[1])
@@ -182,7 +198,7 @@ def _queen_capture_turns(field: Field, x: int, y: int, side: SideType,
 
             field.at(current_x, current_y).change_type(CheckerType.NONE)
             field.at(x, y).change_type(friendly[1])
-            field.at(victim[0], victim[1]).change_type(enemy[0])
+            field.at(victim[0], victim[1]).change_type(victim_type)
 
     return continuations
 
@@ -200,7 +216,10 @@ def generate_turns(field: Field, side: SideType, rules: R.RuleSet) -> list:
                 if rules.queen_flying:
                     capture_turns.extend(_queen_capture_turns(field, x, y, side, set(), []))
                 else:
-                    capture_turns.extend(_man_capture_turns(field, x, y, side, rules, set(), []))
+                    # Нелетающая дамка бьёт во все 4 направления независимо от
+                    # того, бьёт ли простая шашка назад (как в rules.required_moves)
+                    capture_turns.extend(_man_capture_turns(field, x, y, side, rules, set(), [],
+                                                            offsets=R.MOVE_OFFSETS))
             else:
                 capture_turns.extend(_man_capture_turns(field, x, y, side, rules, set(), []))
 
@@ -235,9 +254,9 @@ def evaluate_field(field: Field, side: SideType) -> float:
     enemy_score = field.get_score(enemy_side)
 
     if enemy_score == 0:
-        return inf
+        return MATE_SCORE
     if my_score == 0:
-        return -inf
+        return -MATE_SCORE
 
     positional = 0.0
     center_x = (field.x_size - 1) / 2
@@ -351,22 +370,34 @@ class Engine:
         if depth <= 0:
             return evaluate_field(field, side)
 
-        key = (R.position_key(field), side.value, depth)
-        cached = self.__table.get(key)
-        if cached is not None:
-            return cached
+        key = (R.position_key(field), side.value)
+        entry = self.__table.get(key)
+        if entry is not None:
+            stored_depth, flag, value = entry
+            # Запись, посчитанная глубже, точнее; границы валидны только
+            # относительно текущего окна alpha/beta
+            if stored_depth >= depth:
+                if flag == EXACT:
+                    return value
+                if flag == LOWER_BOUND and value >= beta:
+                    return value
+                if flag == UPPER_BOUND and value <= alpha:
+                    return value
 
         turns = generate_turns(field, side, self.rules)
         if not turns:
-            # Нет ходов — поражение стороны
-            return -inf + (self.max_depth - depth)
+            # Нет ходов — поражение; чем ближе к корню, тем «хуже» этот мат
+            return -(MATE_SCORE - (self.max_depth - depth))
 
+        original_alpha = alpha
         turns = self.__order_turns(field, turns, depth)
         best = -inf
         for turn in turns:
             undo = apply_turn(field, turn, self.rules)
-            value = -self.__negamax(field, SideType.opposite(side), depth - 1, -beta, -alpha)
-            undo_turn(field, undo)
+            try:
+                value = -self.__negamax(field, SideType.opposite(side), depth - 1, -beta, -alpha)
+            finally:
+                undo_turn(field, undo)
 
             if value > best:
                 best = value
@@ -376,8 +407,19 @@ class Engine:
                 self.__killers[depth] = (depth, turn[0])
                 break
 
-        if len(self.__table) < MAX_TRANSPOSITION_ENTRIES:
-            self.__table[key] = best
+        if best <= original_alpha:
+            flag = UPPER_BOUND
+        elif best >= beta:
+            flag = LOWER_BOUND
+        else:
+            flag = EXACT
+
+        existing = self.__table.get(key)
+        if existing is not None and existing[0] > depth:
+            return best
+        if existing is None and len(self.__table) >= MAX_TRANSPOSITION_ENTRIES:
+            return best
+        self.__table[key] = (depth, flag, best)
         return best
 
     def __search_root(self, field: Field, side: SideType, turns: list, depth: int):
@@ -413,9 +455,12 @@ class Engine:
 
         turns = generate_turns(field, side, self.rules)
         if root_moves:
+            # root_moves — одиночные шаги текущего полухода, а turns — полные
+            # серии: сопоставляем по первому шагу, иначе серии из нескольких
+            # шагов отфильтровываются и ИИ получает нелегальный выбор
             allowed = {(move.from_x, move.from_y, move.to_x, move.to_y) for move in root_moves}
             filtered = [turn for turn in turns
-                        if (turn[0].from_x, turn[0].from_y, turn[-1].to_x, turn[-1].to_y) in allowed]
+                        if (turn[0].from_x, turn[0].from_y, turn[0].to_x, turn[0].to_y) in allowed]
             turns = filtered or turns
 
         if not turns:
@@ -438,24 +483,29 @@ class Engine:
                     pass
             if self.__time_is_up() or depth >= self.max_depth:
                 break
-            if score in (inf, -inf):
+            if abs(score) >= MATE_SCORE // 2:
                 # Найден мат — углубляться незачем
                 break
 
         # Осмысленная случайность: лёгкие уровни иногда выбирают чуть худшие ходы
-        if self.noise_scale > 0 and len(turns) > 1:
+        if self.noise_scale > 0 and len(turns) > 1 and not self.__time_is_up():
             scored = []
             for turn in turns:
+                if self.__time_is_up():
+                    scored = []
+                    break
                 undo = apply_turn(field, turn, self.rules)
-                value = -self.__negamax(field, SideType.opposite(side),
-                                        max(0, reached_depth - 1), -inf, inf)
-                undo_turn(field, undo)
+                try:
+                    value = -self.__negamax(field, SideType.opposite(side),
+                                            max(0, reached_depth - 1), -inf, inf)
+                finally:
+                    undo_turn(field, undo)
                 scored.append((value, turn))
-            best_value = max(value for value, _ in scored)
-            close = [turn for value, turn in scored if best_value - value <= self.noise_scale]
-            if close:
-                import random
-                best_turn = random.choice(close)
+            if scored:
+                best_value = max(value for value, _ in scored)
+                close = [turn for value, turn in scored if best_value - value <= self.noise_scale]
+                if close:
+                    best_turn = random.choice(close)
 
         return SearchResult(
             move=best_turn[0],

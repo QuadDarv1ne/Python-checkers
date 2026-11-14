@@ -211,21 +211,30 @@ def moves_for_side(field, side: SideType, rules: RuleSet) -> list:
 def capture_points(field, move: Move) -> list:
     '''Клетки шашек, которые снимаются этим ходом'''
     captured = []
-    dx = 0 if move.to_x == move.from_x else (1 if move.to_x > move.from_x else -1)
-    dy = 0 if move.to_y == move.from_y else (1 if move.to_y > move.from_y else -1)
+    dx = move.to_x - move.from_x
+    dy = move.to_y - move.from_y
+    # Взятие возможно только по диагонали: шаг должен быть одинаковым по обеим осям
+    if abs(dx) != abs(dy) or dx == 0:
+        return captured
+    step_x = 1 if dx > 0 else -1
+    step_y = 1 if dy > 0 else -1
 
-    x, y = move.from_x + dx, move.from_y + dy
-    while (x, y) != (move.to_x, move.to_y):
+    x, y = move.from_x + step_x, move.from_y + step_y
+    while field.is_within(x, y) and (x, y) != (move.to_x, move.to_y):
         if field.type_at(x, y) != CheckerType.NONE:
             captured.append(Point(x, y))
-        x += dx
-        y += dy
+        x += step_x
+        y += step_y
     return captured
 
 
-def position_key(field) -> tuple:
-    '''Компактный ключ позиции для поиска повторов'''
-    return tuple(
+def position_key(field) -> bytes:
+    '''Компактный ключ позиции для поиска повторов.
+
+    Значения CheckerType малы (1..5), поэтому вся доска помещается в bytes:
+    такой ключ хэшируется и сравнивается в разы быстрее кортежа из 64 элементов.
+    '''
+    return bytes(
         field.type_at(x, y).value
         for y in range(field.y_size)
         for x in range(field.x_size)

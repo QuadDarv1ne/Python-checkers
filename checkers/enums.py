@@ -10,7 +10,8 @@ class SideType(Enum):
             return SideType.BLACK
         elif (side == SideType.BLACK):
             return SideType.WHITE
-        else: raise ValueError()
+        else:
+            raise ValueError(f'Неизвестная сторона: {side!r}')
 
 class CheckerType(Enum):
     NONE = auto()

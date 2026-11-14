@@ -12,6 +12,7 @@ import threading
 from dataclasses import dataclass
 from time import sleep
 from tkinter import Canvas, Event, messagebox
+from tkinter import TclError
 
 from PIL import Image, ImageTk
 from PIL.Image import LANCZOS as ANTIALIAS
@@ -245,17 +246,21 @@ class Game:
 
     def __draw(self):
         '''Полная перерисовка доски'''
-        self.__canvas.delete('all')
-        self.__canvas.config(bg=self.__theme.canvas_bg)
-        self.__canvas.create_rectangle(
-            0, 0, self.board_width, self.board_height,
-            fill=self.__theme.canvas_bg, width=0, tag='background',
-        )
-        self.__draw_field_grid()
-        if self.__show_coordinates:
-            self.__draw_coordinates()
-        self.__draw_checkers()
-        self.__notify_update()
+        try:
+            self.__canvas.delete('all')
+            self.__canvas.config(bg=self.__theme.canvas_bg)
+            self.__canvas.create_rectangle(
+                0, 0, self.board_width, self.board_height,
+                fill=self.__theme.canvas_bg, width=0, tag='background',
+            )
+            self.__draw_field_grid()
+            if self.__show_coordinates:
+                self.__draw_coordinates()
+            self.__draw_checkers()
+            self.__notify_update()
+        except TclError:
+            # Холст уничтожен (окно закрыто) — прерываем тихо
+            pass
 
     def __draw_field_grid(self):
         '''Сетка доски и вся подсветка клеток'''
@@ -378,35 +383,35 @@ class Game:
         start_x, start_y = self.__padding + from_sx * self.__cell, self.__padding + from_sy * self.__cell
         end_x, end_y = self.__padding + to_sx * self.__cell, self.__padding + to_sy * self.__cell
 
-        image = self.__checker_image(checker_type)
-        if image is not None:
-            item = self.__canvas.create_image(start_x, start_y, image=image, anchor='nw',
-                                              tag='animated_checker')
-        else:
-            inset = self.__cell * 0.15
-            item = self.__canvas.create_oval(
-                start_x + inset, start_y + inset,
-                start_x + self.__cell - inset, start_y + self.__cell - inset,
-                fill=self.__theme.white_piece if checker_type in WHITE_CHECKERS else self.__theme.black_piece,
-                outline=self.__theme.panel_fg, width=BORDER_WIDTH, tag='animated_checker',
-            )
+        try:
+            image = self.__checker_image(checker_type)
+            if image is not None:
+                item = self.__canvas.create_image(start_x, start_y, image=image, anchor='nw',
+                                                  tag='animated_checker')
+            else:
+                inset = self.__cell * 0.15
+                item = self.__canvas.create_oval(
+                    start_x + inset, start_y + inset,
+                    start_x + self.__cell - inset, start_y + self.__cell - inset,
+                    fill=self.__theme.white_piece if checker_type in WHITE_CHECKERS else self.__theme.black_piece,
+                    outline=self.__theme.panel_fg, width=BORDER_WIDTH, tag='animated_checker',
+                )
 
-        steps = 8
-        for step in range(1, steps + 1):
-            ratio = step / steps
-            self.__canvas.coords(
-                item,
-                start_x + (end_x - start_x) * ratio,
-                start_y + (end_y - start_y) * ratio,
-            ) if image is None else self.__canvas.coords(
-                item,
-                start_x + (end_x - start_x) * ratio,
-                start_y + (end_y - start_y) * ratio,
-            )
-            self.__canvas.update()
-            sleep(0.012)
+            steps = 8
+            for step in range(1, steps + 1):
+                ratio = step / steps
+                self.__canvas.coords(
+                    item,
+                    start_x + (end_x - start_x) * ratio,
+                    start_y + (end_y - start_y) * ratio,
+                )
+                self.__canvas.update()
+                sleep(0.012)
 
-        self.__canvas.delete(item)
+            self.__canvas.delete(item)
+        except TclError:
+            # Холст уничтожен во время анимации — просто выходим
+            pass
         self.__animated_cell = Point()
 
     def __animate_captures(self, points: list[Point]):
@@ -421,22 +426,25 @@ class Game:
             inset = self.__cell * 0.15
             items.append((x1 + inset, y1 + inset, x2 - inset, y2 - inset))
 
-        frames = 5
-        for frame in range(1, frames + 1):
-            ratio = 1 - frame / frames * 0.8
+        try:
+            frames = 5
+            for frame in range(1, frames + 1):
+                ratio = 1 - frame / frames * 0.8
+                self.__canvas.delete('capture_fade')
+                for box in items:
+                    cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+                    half_w = (box[2] - box[0]) / 2 * ratio
+                    half_h = (box[3] - box[1]) / 2 * ratio
+                    self.__canvas.create_oval(
+                        cx - half_w, cy - half_h, cx + half_w, cy + half_h,
+                        fill=self.__theme.canvas_bg, outline='', stipple='gray50',
+                        width=0, tag='capture_fade',
+                    )
+                self.__canvas.update()
+                sleep(0.018)
             self.__canvas.delete('capture_fade')
-            for box in items:
-                cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
-                half_w = (box[2] - box[0]) / 2 * ratio
-                half_h = (box[3] - box[1]) / 2 * ratio
-                self.__canvas.create_oval(
-                    cx - half_w, cy - half_h, cx + half_w, cy + half_h,
-                    fill=self.__theme.canvas_bg, outline='', stipple='gray50',
-                    width=0, tag='capture_fade',
-                )
-            self.__canvas.update()
-            sleep(0.018)
-        self.__canvas.delete('capture_fade')
+        except TclError:
+            pass
 
     # --- Мышь ----------------------------------------------------------------
 
@@ -1125,7 +1133,11 @@ class Game:
     def __notify_update(self):
         '''Уведомить интерфейс об изменении состояния'''
         if self.__update_callback:
-            self.__update_callback()
+            try:
+                self.__update_callback()
+            except TclError:
+                # Окно закрыто — колбэк (update_status) не должен падать
+                pass
 
     # --- Свойства ------------------------------------------------------------
 
