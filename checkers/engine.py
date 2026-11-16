@@ -5,7 +5,8 @@
 и для турецкого удара.
 
 Ускорения:
-- порядок ходов — сначала взятия с большим числом побитых шашек и превращения;
+- MVV-LVA ordering — взятия сортируются по материалу жертвы и атакующего;
+- PVS (Principal Variation Search) — нулевое окно для неглавных ходов;
 - таблица транспозиций — повторно встреченные позиции не пересчитываются;
 - итеративное углубление — поиск идёт от глубины 1 вверх, поэтому в любой
   момент есть готовый лучший ход (важно для лимита по времени и отмены).
@@ -35,6 +36,19 @@ MATE_SCORE = 1_000_000.0
 
 # Флаги записей таблицы транспозиций (значение относительно окна поиска)
 EXACT, LOWER_BOUND, UPPER_BOUND = 0, 1, 2
+
+# Материалы фигур для MVV-LVA ordering (сортировка взятий)
+_CHECKER_MATERIAL = {
+    CheckerType.WHITE_REGULAR: 1,
+    CheckerType.BLACK_REGULAR: 1,
+    CheckerType.WHITE_QUEEN: 3,
+    CheckerType.BLACK_QUEEN: 3,
+}
+
+
+def _material(checker_type: CheckerType) -> int:
+    '''Материал шашки для MVV-LVA ordering'''
+    return _CHECKER_MATERIAL.get(checker_type, 0)
 
 
 @dataclass
@@ -346,20 +360,50 @@ class Engine:
         return False
 
     def __order_turns(self, field: Field, turns: list, depth: int) -> list:
-        '''Сначала взятия и превращения, затем остальное'''
+        '''MVV-LVA ordering: взятия с наибольшим материалом жертвы и наименьшим атакующего'''
         def score(turn):
             captured = turn_captures(field, turn)
+            
+            # MVV-LVA: Material Value Victim — Least Valuable Attacker
+            mvv_lva = 0
+            if captured > 0:
+                victim_material = 0
+                first_leg = turn[0]
+                attacker_type = field.type_at(first_leg.from_x, first_leg.from_y)
+                attacker_material = _material(attacker_type)
+                
+                for leg in turn:
+                    for point in R.capture_points(field, leg):
+                        victim_material = max(victim_material, _material(field.type_at(point.x, point.y)))
+                
+                # Больше — лучше: взятие дамки (3) обычной (1) = 3*10 + 5 = 35
+                mvv_lva = victim_material * 10 + (6 - attacker_material)
+            
+            # Превращения
             last = turn[-1]
-            checker_type = field.type_at(turn[0].from_x, turn[0].from_y)
+            first_leg = turn[0]
+            checker_type = field.type_at(first_leg.from_x, first_leg.from_y)
             side = SideType.WHITE if checker_type in WHITE_CHECKERS else SideType.BLACK
             promotion = 1 if (not R.is_queen(checker_type)
                               and R.promotes(side, last.to_y, field.y_size)) else 0
+            
+            # Killers
             killer = 1 if (depth, turn[0]) == self.__killers.get(depth) else 0
-            return (captured, promotion, killer)
-
+            
+            return (captured, mvv_lva, promotion, killer)
+        
         return sorted(turns, key=score, reverse=True)
 
-    # -- Поиск --
+    def __store_tt(self, key, depth, flag, value):
+        '''Записать результат в таблицу транспозиций'''
+        existing = self.__table.get(key)
+        if existing is not None and existing[0] > depth:
+            return
+        if existing is None and len(self.__table) >= MAX_TRANSPOSITION_ENTRIES:
+            return
+        self.__table[key] = (depth, flag, value)
+
+    # -- Поиск (PVS — Principal Variation Search) --
 
     def __negamax(self, field: Field, side: SideType, depth: int,
                   alpha: float, beta: float) -> float:
@@ -374,8 +418,6 @@ class Engine:
         entry = self.__table.get(key)
         if entry is not None:
             stored_depth, flag, value = entry
-            # Запись, посчитанная глубже, точнее; границы валидны только
-            # относительно текущего окна alpha/beta
             if stored_depth >= depth:
                 if flag == EXACT:
                     return value
@@ -386,40 +428,58 @@ class Engine:
 
         turns = generate_turns(field, side, self.rules)
         if not turns:
-            # Нет ходов — поражение; чем ближе к корню, тем «хуже» этот мат
             return -(MATE_SCORE - (self.max_depth - depth))
 
-        original_alpha = alpha
         turns = self.__order_turns(field, turns, depth)
+
+        # PVS (Principal Variation Search)
         best = -inf
-        for turn in turns:
+        first = turns[0]
+
+        # Первый ход — полный поиск с полным окном
+        undo = apply_turn(field, first, self.rules)
+        try:
+            value = -self.__negamax(field, SideType.opposite(side), depth - 1, -beta, -alpha)
+        finally:
+            undo_turn(field, undo)
+
+        best = value
+        alpha = max(alpha, best)
+
+        if alpha >= beta:
+            # Beta cutoff на первом ходе
+            self.__killers[depth] = (depth, first[0])
+            self.__store_tt(key, depth, EXACT, best)
+            return best
+
+        # Остальные ходы — нулевое окно, полный поиск при необходимости
+        for turn in turns[1:]:
+            if self.__time_is_up():
+                break
+
             undo = apply_turn(field, turn, self.rules)
             try:
-                value = -self.__negamax(field, SideType.opposite(side), depth - 1, -beta, -alpha)
+                # Null-window search: проверяем, проходится ли ход за alpha
+                value = -self.__negamax(field, SideType.opposite(side), depth - 1, -alpha - 1, -alpha)
             finally:
                 undo_turn(field, undo)
 
+            # Re-search с полным окном, если null-window прошёл alpha
+            if value > alpha:
+                undo = apply_turn(field, turn, self.rules)
+                try:
+                    value = -self.__negamax(field, SideType.opposite(side), depth - 1, -beta, -alpha)
+                finally:
+                    undo_turn(field, undo)
+
             if value > best:
                 best = value
-            if best > alpha:
                 alpha = best
-            if alpha >= beta:
-                self.__killers[depth] = (depth, turn[0])
-                break
+                if alpha >= beta:
+                    self.__killers[depth] = (depth, turn[0])
+                    break
 
-        if best <= original_alpha:
-            flag = UPPER_BOUND
-        elif best >= beta:
-            flag = LOWER_BOUND
-        else:
-            flag = EXACT
-
-        existing = self.__table.get(key)
-        if existing is not None and existing[0] > depth:
-            return best
-        if existing is None and len(self.__table) >= MAX_TRANSPOSITION_ENTRIES:
-            return best
-        self.__table[key] = (depth, flag, best)
+        self.__store_tt(key, depth, EXACT, best)
         return best
 
     def __search_root(self, field: Field, side: SideType, turns: list, depth: int):
