@@ -298,6 +298,8 @@ class CheckersApp:
 
     def __build_menu(self):
         '''Главное меню: игра, сложность, сторона, правила, звук, вид, справка'''
+        self._about_dialog = None  # Ссылка на открытое окно «О программе»
+
         menu = Menu(self.window)
         self.window.config(menu=menu)
 
@@ -850,7 +852,14 @@ class CheckersApp:
         '''Красивое окно «О программе» с информацией об авторе и ссылками'''
         theme = self.theme
 
+        # Если диалог уже открыт — поднять поверх остальных, а не создавать дубль
+        if self._about_dialog is not None and self._about_dialog.winfo_exists():
+            self._about_dialog.lift()
+            self._about_dialog.focus_force()
+            return
+
         dialog = Toplevel(self.window)
+        self._about_dialog = dialog  # Сохраняем ссылку
         dialog.title('О программе')
         dialog.transient(self.window)
         dialog.grab_set()
@@ -879,10 +888,15 @@ class CheckersApp:
         canvas.pack(side='left', fill='both', expand=True, padx=4, pady=4)
         scrollbar.pack(side='right', fill='y')
 
-        # Мышь-прокрутка
+        # Прокрутка колёсиком: вешаем на сам диалог, чтобы работало
+        # независимо от того, над каким дочерним виджетом находится курсор
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
-        canvas.bind_all('<MouseWheel>', _on_mousewheel)
+
+        dialog.bind('<MouseWheel>', _on_mousewheel)
+        # Для Linux (Button-4/5 вместо MouseWheel)
+        dialog.bind('<Button-4>', lambda e: canvas.yview_scroll(-1, 'units'))
+        dialog.bind('<Button-5>', lambda e: canvas.yview_scroll(1, 'units'))
 
         main = Frame(scroll_frame, bg=theme.panel_bg, padx=24, pady=16)
         main.pack(fill='both', expand=True)
@@ -983,7 +997,8 @@ class CheckersApp:
 
         # Кнопка закрытия
         def _close():
-            canvas.unbind_all('<MouseWheel>')
+            self._about_dialog = None
+            canvas.unbind('<MouseWheel>')
             dialog.destroy()
 
         Button(
