@@ -34,6 +34,10 @@ MIN_WIDTH = 560
 MIN_HEIGHT = 640
 HISTORY_WIDTH = 176
 
+# Размер окна при старте: доля рабочего стола
+MAX_WORK_WIDTH = 1040
+MAX_WORK_HEIGHT = 900
+
 # Соответствие горячих клавиш и действий (показывается в меню)
 SHORTCUTS = {
     'new': 'Ctrl+N',
@@ -417,11 +421,11 @@ class CheckersApp:
             return ARROW
         if self.game.is_thinking:
             return WAIT
-        cell = self.game._Game__cell_from_pixel(event.x, event.y)
+        cell = self.game.cell_from_pixel(event.x, event.y)
         if not cell:
             return ARROW
 
-        moves = self.game._Game__get_available_moves(self.game.player_side)
+        moves = self.game.available_moves(self.game.player_side)
         if any(move.from_x == cell.x and move.from_y == cell.y for move in moves):
             return HAND
         return ARROW
@@ -823,11 +827,6 @@ class CheckersApp:
         if manager.music_enabled:
             manager.set_music_enabled(False)
         self.window.destroy()
-
-
-# Размер окна при старте: доля рабочего стола
-MAX_WORK_WIDTH = 1040
-MAX_WORK_HEIGHT = 900
 
 
 def main():

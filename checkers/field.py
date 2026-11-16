@@ -2,7 +2,6 @@ from checkers.enums import CheckerType, SideType
 from checkers.checker import Checker
 from checkers.constants import WHITE_CHECKERS, BLACK_CHECKERS
 
-from functools import reduce
 
 class Field:
     def __init__(self, x_size: int, y_size: int):
@@ -63,22 +62,46 @@ class Field:
     @property
     def white_checkers_count(self) -> int:
         '''Количество белых шашек на поле'''
-        return sum(reduce(lambda acc, checker: acc + (checker.type in WHITE_CHECKERS), checkers, 0) for checkers in self.__checkers)
+        count = 0
+        for checkers in self.__checkers:
+            for checker in checkers:
+                if checker.type in WHITE_CHECKERS:
+                    count += 1
+        return count
 
     @property
     def black_checkers_count(self) -> int:
         '''Количество чёрных шашек на поле'''
-        return sum(reduce(lambda acc, checker: acc + (checker.type in BLACK_CHECKERS), checkers, 0) for checkers in self.__checkers)
+        count = 0
+        for checkers in self.__checkers:
+            for checker in checkers:
+                if checker.type in BLACK_CHECKERS:
+                    count += 1
+        return count
 
     @property
     def white_score(self) -> int:
         '''Счёт белых'''
-        return sum(reduce(lambda acc, checker: acc + (checker.type == CheckerType.WHITE_REGULAR) + (checker.type == CheckerType.WHITE_QUEEN) * 3, checkers, 0) for checkers in self.__checkers)
+        total = 0
+        for checkers in self.__checkers:
+            for checker in checkers:
+                if checker.type == CheckerType.WHITE_REGULAR:
+                    total += 1
+                elif checker.type == CheckerType.WHITE_QUEEN:
+                    total += 3
+        return total
     
     @property
     def black_score(self) -> int:
         '''Счёт чёрных'''
-        return sum(reduce(lambda acc, checker: acc + (checker.type == CheckerType.BLACK_REGULAR) + (checker.type == CheckerType.BLACK_QUEEN) * 3, checkers, 0) for checkers in self.__checkers)
+        total = 0
+        for checkers in self.__checkers:
+            for checker in checkers:
+                if checker.type == CheckerType.BLACK_REGULAR:
+                    total += 1
+                elif checker.type == CheckerType.BLACK_QUEEN:
+                    total += 3
+        return total
 
     def get_score(self, side: SideType) -> int:
         '''Получить счёт для указанной стороны'''

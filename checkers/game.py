@@ -1087,6 +1087,14 @@ class Game:
         '''Есть ли ход для отмены'''
         return len(self.__positions) > 1
 
+    def cell_from_pixel(self, px: int, py: int) -> Point:
+        '''Публичный доступ: клетка доски под точкой холста'''
+        return self.__cell_from_pixel(px, py)
+
+    def available_moves(self, side: SideType) -> list[Move]:
+        '''Публичный доступ: ходы стороны с учётом обязательной серии'''
+        return self.__get_available_moves(side)
+
     # --- Правила и поиск -----------------------------------------------------
 
     def __get_available_moves(self, side: SideType) -> list[Move]:
