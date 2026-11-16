@@ -42,7 +42,7 @@ MIN_VOLUME = 10
 MAX_VOLUME = 100
 
 # Имена эффектов, которые умеет синтезировать модуль
-EFFECT_NAMES = ('move', 'capture', 'queen', 'win', 'lose')
+EFFECT_NAMES = ('move', 'capture', 'queen', 'win', 'lose', 'draw')
 
 
 # --- Синтез волн -----------------------------------------------------------
@@ -175,6 +175,14 @@ def _effect_lose() -> list[float]:
     return _normalize(_mix(*tracks), 0.8)
 
 
+def _effect_draw() -> list[float]:
+    # Нейтральный «двухтонный» сигнал: ни мажорного взлёта, ни минорного падения
+    notes = (523.25, 523.25)
+    tracks = [_shift(_tone(freq, 0.45, 0.25, decay=2.0), index * 0.22)
+              for index, freq in enumerate(notes)]
+    return _normalize(_mix(*tracks), 0.8)
+
+
 def _music_loop() -> list[float]:
     '''Спокойная фоновая тема: аккорды и пентатоническая мелодия'''
     rate = MUSIC_SAMPLE_RATE
@@ -221,6 +229,7 @@ _GENERATORS = {
     'queen': _effect_queen,
     'win': _effect_win,
     'lose': _effect_lose,
+    'draw': _effect_draw,
     'music': _music_loop,
 }
 
@@ -549,7 +558,10 @@ class SoundManager:
         # MCI для waveaudio не умеет repeat, поэтому луп держим сами
         while not stop.wait(0.35):
             code, mode = mci(f'status {alias} mode')
-            if code != 0 or mode.strip() == 'stopped':
+            if code != 0:
+                # Алиас недоступен (устройство/драйвер) — крутить цикл бессмысленно
+                break
+            if mode.strip() == 'stopped':
                 if mci(f'play {alias} from 0')[0] != 0:
                     break
 

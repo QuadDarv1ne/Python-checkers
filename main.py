@@ -10,6 +10,7 @@ from tkinter import messagebox
 
 from checkers import cursor_packs
 from checkers import rules as R
+from checkers.audio import SoundManager
 from checkers.constants import X_SIZE, Y_SIZE
 from checkers.cursor import (
     ARROW,
@@ -816,10 +817,11 @@ class CheckersApp:
 
     def close(self):
         '''Закрыть приложение, остановив музыку'''
-        if self.game is not None:
-            manager = self.game.sound_manager
-            if manager.music_enabled:
-                manager.set_music_enabled(False)
+        # SoundManager — синглтон на процесс: останавливаем напрямую,
+        # иначе музыка переживёт закрытие окна (game может ещё не существовать)
+        manager = SoundManager()
+        if manager.music_enabled:
+            manager.set_music_enabled(False)
         self.window.destroy()
 
 

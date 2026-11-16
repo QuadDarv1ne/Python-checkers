@@ -1,4 +1,8 @@
 class Point:
+    '''Клетка доски. Экземпляров создаётся очень много, поэтому __slots__'''
+
+    __slots__ = ('__x', '__y')
+
     def __init__(self, x: int = -1, y: int = -1):
         self.__x = x
         self.__y = y

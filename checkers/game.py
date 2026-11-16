@@ -9,6 +9,7 @@ Game не знает о конкретном окне: всё общение с 
 позиция сохраняется в историю, поэтому партию можно листать.
 """
 import threading
+import traceback
 from dataclasses import dataclass
 from time import sleep
 from tkinter import Canvas, Event, messagebox
@@ -22,6 +23,7 @@ from checkers.audio import SoundManager
 from checkers.constants import (
     BORDER_WIDTH,
     DEFAULT_DIFFICULTY,
+    MAX_HISTORY,
     PLAYER_SIDE,
     WHITE_CHECKERS,
 )
@@ -121,6 +123,11 @@ class Game:
         self.__cancel_event = None
         self.__think_result = None
         self.__search_progress = None
+        # Номер поколения расчёта: результат «умершего» потока не должен
+        # перетирать данные нового поиска после restart/undo
+        self.__think_seq = 0
+        # id таймера отложенного хода ИИ, чтобы его можно было отменить
+        self.__enemy_after = None
 
         self.__sound_manager = SoundManager()
         self.__sound_manager.set_enabled(sounds_enabled)
@@ -171,6 +178,8 @@ class Game:
             return
         self.__cell = cell
         self.__padding = padding
+        # Изображения шашек отрисованы под старый размер клетки
+        self.__image_cache.clear()
         self.__canvas.config(width=self.board_width, height=self.board_height)
         self.__draw()
 
@@ -683,13 +692,18 @@ class Game:
         self.__notify_update()
 
         def run():
+            self.__enemy_after = None
             self.__enemy_pending = False
             if self.__game_over:
+                return
+            if self.is_browsing:
+                # Пользователь листает историю: ход отложен,
+                # __restore возобновит его при возврате к текущей позиции
                 return
             self.__start_thinking()
 
         try:
-            self.__canvas.after(10, run)
+            self.__enemy_after = self.__canvas.after(10, run)
         except Exception:
             # Холст уже уничтожен — ход не нужен
             self.__enemy_pending = False
@@ -715,10 +729,22 @@ class Game:
         def progress(depth, max_depth, move, score):
             self.__search_progress = (depth, max_depth, move, score)
 
+        self.__think_seq += 1
+        seq = self.__think_seq
+
         def work():
-            engine = Engine(rules, difficulty.depth, difficulty.time_limit,
-                            difficulty.noise_scale, cancel, progress)
-            self.__think_result = engine.search(field_copy, side, root_moves=moves)
+            try:
+                engine = Engine(rules, difficulty.depth, difficulty.time_limit,
+                                difficulty.noise_scale, cancel, progress)
+                result = engine.search(field_copy, side, root_moves=moves)
+            except Exception:
+                # Ошибка поиска не должна «съедать» ход ИИ молча
+                traceback.print_exc()
+                result = None
+            # Поток отменённой партии (restart/undo уже запустили новый расчёт)
+            # не имеет права записывать свой результат
+            if self.__think_seq == seq:
+                self.__think_result = result
 
         self.__think_thread = threading.Thread(target=work, daemon=True, name='checkers-ai')
         self.__think_thread.start()
@@ -799,6 +825,9 @@ class Game:
         self.__hovered_cell = Point()
         self.__must_continue_from = None
         self.__hint_move = None
+        # Незавершённый расчёт больше не нужен: иначе poll применит
+        # найденный ход к уже завершённой партии
+        self.__cancel_thinking_silently()
         self.__draw()
 
         if loser_side is None:
@@ -873,8 +902,18 @@ class Game:
             self.__schedule_enemy_turn()
 
     def __cancel_thinking_silently(self):
+        '''Остановить расчёт ИИ и отменить его отложенный старт'''
+        if self.__enemy_after is not None:
+            try:
+                self.__canvas.after_cancel(self.__enemy_after)
+            except Exception:
+                pass
+            self.__enemy_after = None
+        self.__enemy_pending = False
         if self.__cancel_event is not None:
             self.__cancel_event.set()
+        # Новое поколение: результат старого потока будет проигнорирован
+        self.__think_seq += 1
         self.__thinking = False
         self.__think_thread = None
         self.__cancel_event = None
@@ -918,6 +957,12 @@ class Game:
         key = self.__position_key()
         self.__repetitions[key] = self.__repetitions.get(key, 0) + 1
 
+        # История ограничена: каждое состояние хранит полную копию поля.
+        # Начальную позицию (индекс 0) оставляем, вытесняем самый старый ход
+        if len(self.__positions) > MAX_HISTORY:
+            del self.__positions[1]
+            self.__index = len(self.__positions) - 1
+
     @property
     def history_entries(self) -> list[dict]:
         '''История ходов для панели интерфейса'''
@@ -953,6 +998,9 @@ class Game:
         '''Показать позицию из истории'''
         index = max(0, min(len(self.__positions) - 1, index))
         snapshot = self.__positions[index]
+        # Ход ИИ из «живой» позиции нельзя применять к отменённой:
+        # сбрасываем расчёт и отложенный старт
+        self.__cancel_thinking_silently()
         self.__field = Field.copy(snapshot.field)
         self.__player_turn = snapshot.player_turn
         self.__quiet_halfmoves = snapshot.quiet
@@ -968,6 +1016,10 @@ class Game:
         self.__chain_captured = 0
         self.__chain_was_queen = False
         self.__draw()
+        # Вернулись к текущей позиции партии, и там очередь за ИИ — ходим
+        if (index == len(self.__positions) - 1 and not self.__player_turn
+                and not self.__game_over):
+            self.__schedule_enemy_turn()
 
     def goto(self, index: int):
         '''Перейти к позиции истории'''
