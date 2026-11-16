@@ -5,6 +5,7 @@
 из меню, все уведомления выводятся тостами, а не модальными диалогами.
 """
 import sys
+import types
 import webbrowser
 from tkinter import (
     BooleanVar, Button, Canvas, Frame, IntVar, Label, Menu, PhotoImage,
@@ -34,6 +35,10 @@ from checkers.toast import ToastManager
 APP_TITLE = 'Шашки'
 APP_VERSION = '7.0'
 APP_RELEASE_DATE = '16.11.2026'
+
+# Заглушка для сброса наведения: координаты за пределами доски.
+# Переиспользуется, чтобы не создавать объект на каждое событие <Leave>.
+LEAVE_EVENT = types.SimpleNamespace(x=-1000, y=-1000)
 
 # Сведения об авторе для окна «О программе»
 AUTHOR_NAME = 'Дуплей Максим Игоревич'
@@ -431,9 +436,9 @@ class CheckersApp:
         self.toggle_music()
 
     def __on_canvas_leave(self, event=None):
-        '''Курсор ушёл с доски — снять наведение'''
+        '''Курсор ушёл с доски — снять наведение и скрыть свой курсор'''
         if self.game is not None:
-            self.game.mouse_move(type('Event', (), {'x': -1000, 'y': -1000})())
+            self.game.mouse_move(LEAVE_EVENT)
         if self.__cursor is not None:
             self.__cursor.hide()
 
