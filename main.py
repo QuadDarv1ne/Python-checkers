@@ -5,7 +5,11 @@
 из меню, все уведомления выводятся тостами, а не модальными диалогами.
 """
 import sys
-from tkinter import BooleanVar, Canvas, Frame, IntVar, Label, Menu, PhotoImage, StringVar, Tk
+import webbrowser
+from tkinter import (
+    BooleanVar, Button, Canvas, Frame, IntVar, Label, Menu, PhotoImage,
+    Scrollbar, StringVar, Tk, Toplevel,
+)
 from tkinter import messagebox
 
 from checkers import cursor_packs
@@ -28,6 +32,37 @@ from checkers.theme import THEMES, theme_by_key
 from checkers.toast import ToastManager
 
 APP_TITLE = 'Шашки'
+APP_VERSION = '7.0'
+APP_RELEASE_DATE = '16.11.2026'
+
+# Сведения об авторе для окна «О программе»
+AUTHOR_NAME = 'Дуплей Максим Игоревич'
+AUTHOR_TITLE = 'Преподаватель программирования'
+AUTHOR_EXPERIENCE = 'Педагогический стаж — 7 лет'
+AUTHOR_CITY = 'Одинцово, Московская область'
+AUTHOR_SCHOOL = 'Programming School Maestro7IT'
+AUTHOR_YEAR = '2026'
+GITHUB_URL = 'https://github.com/QuadDarv1ne/Python-checkers'
+GITHUB_LABEL = 'github.com/QuadDarv1ne/Python-checkers'
+TELEGRAM_URL = 'https://t.me/quadd4rv1n7'
+TELEGRAM_LABEL = '@quadd4rv1n7'
+AUTHOR_EMAIL = 'maksimqwe42@mail.ru'
+STEPICK_URL = 'https://stepik.org/users/150943726/teach'
+STEPICK_LABEL = 'stepik.org — курсы по программированию'
+TENCHAT_URL = 'https://tenchat.ru/quadd4rv1n7'
+TENCHAT_LABEL = 'tenchat.ru — профиль'
+LICENSE_LINE = f'© {AUTHOR_YEAR} {AUTHOR_NAME} · Лицензия {AUTHOR_SCHOOL}'
+
+# Список изменений для окна «О программе»
+RELEASE_NOTES = [
+    'Три варианта правил: русские, международные, английские',
+    'Четыре уровня сложности ИИ с итеративным углублением',
+    'Панель истории ходов с переходом по позициям',
+    'Свой курсор над доской: наборы и перекраска',
+    'Две темы оформления, доска масштабируется вместе с окном',
+    'Звуковые эффекты и фоновая музыка (синтез на лету)',
+    'Сохранение настроек между запусками',
+]
 
 # Минимальный размер окна и доля, отводимая панели истории
 MIN_WIDTH = 560
@@ -802,16 +837,169 @@ class CheckersApp:
         )
         messagebox.showinfo('Горячие клавиши', text, parent=self.window)
 
+    def _open_link(self, url: str) -> None:
+        '''Открыть ссылку в системном браузере'''
+        webbrowser.open(url)
+
     def show_about(self):
-        '''Окно «О программе»'''
-        messagebox.showinfo(
-            'О программе',
-            'Шашки на Python (Tkinter)\n\n'
-            'ИИ: минимакс с альфа-бета отсечением,\n'
-            'таблица транспозиций и итеративное углубление.\n\n'
-            'Звук и музыка синтезируются на лету.',
-            parent=self.window,
+        '''Красивое окно «О программе» с информацией об авторе и ссылками'''
+        theme = self.theme
+
+        dialog = Toplevel(self.window)
+        dialog.title('О программе')
+        dialog.transient(self.window)
+        dialog.grab_set()
+        dialog.configure(bg=theme.panel_bg)
+        dialog.resizable(True, True)
+
+        # Центрирование над главным окном
+        self.window.update_idletasks()
+        dialog_w, dialog_h = 500, 660
+        x = self.window.winfo_x() + (self.window.winfo_width() - dialog_w) // 2
+        y = self.window.winfo_y() + (self.window.winfo_height() - dialog_h) // 2
+        dialog.geometry(f'{dialog_w}x{dialog_h}+{x}+{y}')
+
+        # Канвас с прокруткой
+        canvas = Canvas(dialog, bg=theme.panel_bg, highlightthickness=0, bd=0)
+        scrollbar = Scrollbar(dialog, orient='vertical', bg=theme.separator,
+                              command=canvas.yview)
+        scroll_frame = Frame(canvas, bg=theme.panel_bg)
+        scroll_frame.bind(
+            '<Configure>',
+            lambda e: canvas.configure(scrollregion=canvas.bbox('all')),
         )
+        canvas.create_window((0, 0), window=scroll_frame, anchor='nw')
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side='left', fill='both', expand=True, padx=4, pady=4)
+        scrollbar.pack(side='right', fill='y')
+
+        # Мышь-прокрутка
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+        canvas.bind_all('<MouseWheel>', _on_mousewheel)
+
+        main = Frame(scroll_frame, bg=theme.panel_bg, padx=24, pady=16)
+        main.pack(fill='both', expand=True)
+
+        # Заголовок
+        Label(
+            main, text='♔  Шашки', font=('Segoe UI', 20, 'bold'),
+            bg=theme.panel_bg, fg=theme.accent,
+        ).pack(pady=(0, 2))
+
+        Label(
+            main, text=f'Версия {APP_VERSION} · Python + Tkinter',
+            font=('Segoe UI', 10), bg=theme.panel_bg, fg=theme.panel_muted,
+        ).pack(pady=(0, 2))
+
+        Label(
+            main, text=f'Обновление: {APP_RELEASE_DATE}',
+            font=('Segoe UI', 9), bg=theme.panel_bg, fg=theme.panel_muted,
+        ).pack(pady=(0, 10))
+
+        # Описание
+        desc = (
+            'Полнофункциональная игра в шашки с ИИ:\n'
+            'минимакс, альфа-бета отсечение, таблица\n'
+            'транспозиций, итеративное углубление.\n'
+            'Звук и музыка синтезируются на лету.'
+        )
+        Label(
+            main, text=desc, font=('Segoe UI', 10),
+            bg=theme.panel_bg, fg=theme.panel_fg, justify='left',
+        ).pack(fill='x', pady=(0, 8))
+
+        # Разделитель
+        Frame(main, height=1, bg=theme.separator).pack(fill='x', pady=(0, 10))
+
+        # Автор
+        Label(
+            main, text=AUTHOR_NAME, font=('Segoe UI', 13, 'bold'),
+            bg=theme.panel_bg, fg=theme.panel_fg, anchor='w',
+        ).pack(fill='x')
+        Label(
+            main, text=AUTHOR_TITLE, font=('Segoe UI', 10),
+            bg=theme.panel_bg, fg=theme.panel_muted, anchor='w',
+        ).pack(fill='x')
+        Label(
+            main, text=f'{AUTHOR_EXPERIENCE} · {AUTHOR_CITY}',
+            font=('Segoe UI', 9), bg=theme.panel_bg, fg=theme.panel_muted,
+            anchor='w',
+        ).pack(fill='x', pady=(0, 2))
+        Label(
+            main, text=AUTHOR_SCHOOL, font=('Segoe UI', 9, 'italic'),
+            bg=theme.panel_bg, fg=theme.panel_muted, anchor='w',
+        ).pack(fill='x', pady=(0, 10))
+
+        # Разделитель
+        Frame(main, height=1, bg=theme.separator).pack(fill='x', pady=(0, 10))
+
+        # Что нового в версии
+        Label(
+            main, text=f'Что нового в {APP_VERSION}', font=('Segoe UI', 11, 'bold'),
+            bg=theme.panel_bg, fg=theme.panel_fg, anchor='w',
+        ).pack(fill='x', pady=(0, 4))
+        for note in RELEASE_NOTES:
+            Label(
+                main, text=f'  •  {note}', font=('Segoe UI', 9),
+                bg=theme.panel_bg, fg=theme.panel_muted, anchor='w', justify='left',
+                wraplength=420,
+            ).pack(fill='x', pady=1)
+
+        # Разделитель
+        Frame(main, height=1, bg=theme.separator).pack(fill='x', pady=(10, 10))
+
+        # Кликабельные ссылки
+        links = [
+            (f'🌐  {GITHUB_LABEL}', GITHUB_URL),
+            (f'💬  {TELEGRAM_LABEL}', TELEGRAM_URL),
+            (f'📧  {AUTHOR_EMAIL}', f'mailto:{AUTHOR_EMAIL}'),
+            (f'✨  {STEPICK_LABEL}', STEPICK_URL),
+            (f'✨  {TENCHAT_LABEL}', TENCHAT_URL),
+        ]
+        for text, url in links:
+            lbl = Label(
+                main, text=text, font=('Segoe UI', 10),
+                bg=theme.panel_bg, fg=theme.accent,
+                anchor='w', cursor='hand2',
+            )
+            lbl.pack(fill='x', pady=1)
+
+            def _enter(e, l=lbl, th=theme):
+                l.config(fg=th.hover_target, font=('Segoe UI', 10, 'underline'))
+
+            def _leave(e, l=lbl, th=theme):
+                l.config(fg=th.accent, font=('Segoe UI', 10))
+
+            lbl.bind('<Button-1>', lambda e, u=url: self._open_link(u))
+            lbl.bind('<Enter>', _enter)
+            lbl.bind('<Leave>', _leave)
+
+        # Кнопка закрытия
+        def _close():
+            canvas.unbind_all('<MouseWheel>')
+            dialog.destroy()
+
+        Button(
+            main, text='Закрыть', font=('Segoe UI', 10),
+            bg=theme.accent, fg=theme.accent_fg,
+            activebackground=theme.accent, activeforeground=theme.accent_fg,
+            bd=0, relief='flat', cursor='hand2', padx=20,
+            command=_close,
+        ).pack(pady=(14, 0))
+
+        # Подвал с лицензией
+        Label(
+            main, text=LICENSE_LINE, font=('Segoe UI', 8),
+            bg=theme.panel_bg, fg=theme.panel_muted,
+        ).pack(pady=(8, 0))
+
+        # Закрытие по клавишам
+        dialog.bind('<Escape>', lambda e: _close())
+        dialog.bind('<Return>', lambda e: _close())
+        dialog.protocol('WM_DELETE_WINDOW', _close)
+        dialog.focus_set()
 
     # --- Жизненный цикл ------------------------------------------------------
 
