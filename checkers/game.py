@@ -123,7 +123,7 @@ class Game:
         self.__cancel_event = None
         self.__think_result = None
         self.__search_progress = None
-        # Номер поколения расчёта: результат «умершего» потока не должен
+        # Номер поколения расчёта: результат "умершего" потока не должен
         # перетирать данные нового поиска после restart/undo
         self.__think_seq = 0
         # id таймера отложенного хода ИИ, чтобы его можно было отменить
@@ -738,7 +738,7 @@ class Game:
                                 difficulty.noise_scale, cancel, progress)
                 result = engine.search(field_copy, side, root_moves=moves)
             except Exception:
-                # Ошибка поиска не должна «съедать» ход ИИ молча
+                # Ошибка поиска не должна "съедать" ход ИИ молча
                 traceback.print_exc()
                 result = None
             # Поток отменённой партии (restart/undo уже запустили новый расчёт)
@@ -998,7 +998,7 @@ class Game:
         '''Показать позицию из истории'''
         index = max(0, min(len(self.__positions) - 1, index))
         snapshot = self.__positions[index]
-        # Ход ИИ из «живой» позиции нельзя применять к отменённой:
+        # Ход ИИ из "живой" позиции нельзя применять к отменённой:
         # сбрасываем расчёт и отложенный старт
         self.__cancel_thinking_silently()
         self.__field = Field.copy(snapshot.field)

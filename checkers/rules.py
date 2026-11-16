@@ -78,7 +78,7 @@ def enemy_checkers(side: SideType) -> list:
 
 
 def forward_offsets(side: SideType) -> list:
-    '''Смещения «вперёд» для простой шашки указанной стороны'''
+    '''Смещения "вперёд" для простой шашки указанной стороны'''
     if side == SideType.WHITE:
         return [offset for offset in MOVE_OFFSETS if offset.y < 0]
     return [offset for offset in MOVE_OFFSETS if offset.y > 0]

@@ -93,7 +93,7 @@ def _tone(frequency: float, duration: float, amplitude: float = 0.3,
 
 def _pad(frequency: float, duration: float, amplitude: float,
          rate: int = MUSIC_SAMPLE_RATE) -> list[float]:
-    '''Мягкая «подушка» аккорда с плавным появлением и уходом'''
+    '''Мягкая "подушка" аккорда с плавным появлением и уходом'''
     count = int(rate * duration)
     attack = max(1, int(rate * 0.35))
     release = max(1, int(rate * 0.6))
@@ -176,7 +176,7 @@ def _effect_lose() -> list[float]:
 
 
 def _effect_draw() -> list[float]:
-    # Нейтральный «двухтонный» сигнал: ни мажорного взлёта, ни минорного падения
+    # Нейтральный "двухтонный" сигнал: ни мажорного взлёта, ни минорного падения
     notes = (523.25, 523.25)
     tracks = [_shift(_tone(freq, 0.45, 0.25, decay=2.0), index * 0.22)
               for index, freq in enumerate(notes)]

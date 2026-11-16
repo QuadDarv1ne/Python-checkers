@@ -17,7 +17,7 @@ from checkers.paths import ASSETS_DIR
 
 CURSOR_PACKS_DIR = ASSETS_DIR / 'cursors'
 
-# Цвет «как в наборе» — не перекрашивать
+# Цвет "как в наборе" — не перекрашивать
 NATIVE_COLOR = 'native'
 
 _IMAGE_CACHE = {}

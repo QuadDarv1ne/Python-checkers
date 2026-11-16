@@ -290,7 +290,7 @@ def test_draw_by_quiet_moves():
     events = []
     game = make_game(root, DifficultyType.EASY,
                      game_over_callback=lambda w, n, r: events.append((w, n, r)))
-    # Только дамки: их ходы не считаются «тихими»
+    # Только дамки: их ходы не считаются "тихими"
     field = empty_field()
     field.at(0, 7).change_type(CheckerType.WHITE_QUEEN)
     field.at(7, 0).change_type(CheckerType.BLACK_QUEEN)

@@ -1,4 +1,4 @@
-"""Точка входа игры «Шашки».
+"""Точка входа игры "Шашки".
 
 Окно: меню, панель статуса, доска с координатами и панель истории ходов.
 Доска масштабируется вместе с окном, тема и вариант правил переключаются
@@ -40,7 +40,7 @@ APP_RELEASE_DATE = '16.11.2026'
 # Переиспользуется, чтобы не создавать объект на каждое событие <Leave>.
 LEAVE_EVENT = types.SimpleNamespace(x=-1000, y=-1000)
 
-# Сведения об авторе для окна «О программе»
+# Сведения об авторе для окна "О программе"
 AUTHOR_NAME = 'Дуплей Максим Игоревич'
 AUTHOR_TITLE = 'Преподаватель программирования'
 AUTHOR_EXPERIENCE = 'Педагогический стаж — 7 лет'
@@ -58,7 +58,7 @@ TENCHAT_URL = 'https://tenchat.ru/quadd4rv1n7'
 TENCHAT_LABEL = 'tenchat.ru — профиль'
 LICENSE_LINE = f'© {AUTHOR_YEAR} {AUTHOR_NAME} · Лицензия {AUTHOR_SCHOOL}'
 
-# Список изменений для окна «О программе»
+# Список изменений для окна "О программе"
 RELEASE_NOTES = [
     'Три варианта правил: русские, международные, английские',
     'Четыре уровня сложности ИИ с итеративным углублением',
@@ -298,7 +298,7 @@ class CheckersApp:
 
     def __build_menu(self):
         '''Главное меню: игра, сложность, сторона, правила, звук, вид, справка'''
-        self._about_dialog = None  # Ссылка на открытое окно «О программе»
+        self._about_dialog = None  # Ссылка на открытое окно "О программе"
 
         menu = Menu(self.window)
         self.window.config(menu=menu)
@@ -479,7 +479,7 @@ class CheckersApp:
         self.__cursor.set_pack(self.cursor_pack_var.get())
         self.__cursor.set_enabled(self.custom_cursor_var.get())
         if not self.custom_cursor_var.get():
-            # Возвращаем обычную «руку» над доской как системный курсор
+            # Возвращаем обычную "руку" над доской как системный курсор
             try:
                 self.canvas.config(cursor='arrow')
             except Exception:
@@ -510,7 +510,7 @@ class CheckersApp:
         self.__toast(f'Курсор: {pack.name.lower() if pack else "векторный"}', 'ok')
 
     def __build_cursor_pack_menu(self, parent):
-        '''Подменю «Набор»: семейства курсоров и векторный вариант'''
+        '''Подменю "Набор": семейства курсоров и векторный вариант'''
         packs = cursor_packs.list_packs()
         if not packs:
             return
@@ -849,7 +849,7 @@ class CheckersApp:
         webbrowser.open(url)
 
     def show_about(self):
-        '''Красивое окно «О программе» с информацией об авторе и ссылками'''
+        '''Красивое окно "О программе" с информацией об авторе и ссылками'''
         theme = self.theme
 
         # Если диалог уже открыт — поднять поверх остальных, а не создавать дубль
