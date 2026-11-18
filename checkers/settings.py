@@ -136,7 +136,8 @@ class Settings:
             os.replace(tmp_path, self.__config_path)
             tmp_path = None
         except OSError:
-            pass
+            import sys
+            print(f'Не удалось сохранить настройки: {self.__config_path}', file=sys.stderr)
         finally:
             # Удалить временный файл, если замена не удалась
             if tmp_path is not None:

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from time import sleep
 from tkinter import Canvas, Event, messagebox
 from tkinter import TclError
+from typing import Optional
 
 from PIL import Image, ImageTk
 from PIL.Image import LANCZOS as ANTIALIAS
@@ -52,7 +53,7 @@ class Snapshot:
     chain: bool
     notation: str
     is_capture: bool
-    last_move: object
+    last_move: Optional[Move]
     quiet: int
 
 
@@ -641,11 +642,17 @@ class Game:
         self.__draw()
 
     def __chain_notation(self, is_capture: bool) -> str:
-        '''Нотация текущей серии ходов'''
+        '''Нотация текущей серии ходов.
+
+        Имена клеток не зависят от стороны просмотра: они совпадают с
+        подписями координат вокруг доски (см. __draw_coordinates).
+        Иначе после переворота доски история расходилась бы с тем,
+        что игрок видит на доске.
+        '''
         if not self.__chain_legs:
             return ''
         return chain_notation(self.__chain_legs, self.__field.x_size, self.__field.y_size,
-                              self.__view_side, is_capture)
+                              SideType.WHITE, is_capture)
 
     def __handle_enemy_turn(self):
         '''Ход ИИ целиком (синхронно, без фонового расчёта)'''
